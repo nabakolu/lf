@@ -183,9 +183,10 @@ func (im iconMap) get(f *file) iconDef {
 		return val
 	}
 
-	if val, ok := im["ex"]; ok && f.Mode()&0111 != 0 {
-		return val
-	}
+	// disable executable icon
+	//if val, ok := im["ex"]; ok && f.Mode()&0111 != 0 {
+	//	return val
+	//}
 
 	if val, ok := im["fi"]; ok {
 		return val
