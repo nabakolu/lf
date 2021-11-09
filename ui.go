@@ -465,6 +465,7 @@ func (win *win) printDir(screen tcell.Screen, dir *dir, selections map[string]in
 
 type ui struct {
 	screen       tcell.Screen
+	polling      bool
 	wins         []*win
 	promptWin    *win
 	msgWin       *win
@@ -538,6 +539,7 @@ func newUI(screen tcell.Screen) *ui {
 
 	ui := &ui{
 		screen:       screen,
+		polling:      true,
 		wins:         getWins(screen),
 		promptWin:    newWin(wtot, 1, 0, 0),
 		msgWin:       newWin(wtot, 1, 0, htot-1),
@@ -561,6 +563,7 @@ func (ui *ui) pollEvents() {
 	for {
 		ev = ui.screen.PollEvent()
 		if ev == nil {
+			ui.polling = false
 			return
 		}
 		ui.tevChan <- ev
@@ -676,7 +679,8 @@ func (ui *ui) loadFileInfo(nav *nav) {
 func (ui *ui) drawPromptLine(nav *nav) {
 	st := tcell.StyleDefault
 
-	pwd := nav.currDir().path
+	dir := nav.currDir()
+	pwd := dir.path
 
 	if strings.HasPrefix(pwd, gUser.HomeDir) {
 		pwd = filepath.Join("~", strings.TrimPrefix(pwd, gUser.HomeDir))
@@ -717,6 +721,12 @@ func (ui *ui) drawPromptLine(nav *nav) {
 	}
 	prompt = strings.Replace(prompt, "%d", pwd, -1)
 
+	if len(dir.filter) != 0 {
+		prompt = strings.Replace(prompt, "%F", fmt.Sprint(dir.filter), -1)
+	} else {
+		prompt = strings.Replace(prompt, "%F", "", -1)
+	}
+
 	ui.promptWin.print(ui.screen, 0, 0, st, prompt)
 }
 
@@ -753,6 +763,10 @@ func (ui *ui) drawStatLine(nav *nav) {
 
 	if len(nav.selections) > 0 {
 		selection += fmt.Sprintf("  \033[35;7m %d \033[0m", len(nav.selections))
+	}
+
+	if len(dir.filter) != 0 {
+		selection += "  \033[34;7m F \033[0m"
 	}
 
 	var progress string
@@ -1158,7 +1172,12 @@ func (ui *ui) suspend() error {
 }
 
 func (ui *ui) resume() error {
-	return ui.screen.Resume()
+	err := ui.screen.Resume()
+	if !ui.polling {
+		go ui.pollEvents()
+		ui.polling = true
+	}
+	return err
 }
 
 func anyKey() {

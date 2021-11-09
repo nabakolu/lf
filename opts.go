@@ -30,12 +30,15 @@ type sortType struct {
 var gOpts struct {
 	anchorfind     bool
 	autoquit       bool
+	dircache       bool
 	dircounts      bool
+	dironly        bool
 	drawbox        bool
 	globsearch     bool
 	icons          bool
 	ignorecase     bool
 	ignoredia      bool
+	incfilter      bool
 	incsearch      bool
 	mouse          bool
 	number         bool
@@ -73,12 +76,15 @@ var gOpts struct {
 func init() {
 	gOpts.anchorfind = true
 	gOpts.autoquit = false
+	gOpts.dircache = true
 	gOpts.dircounts = false
+	gOpts.dironly = false
 	gOpts.drawbox = false
 	gOpts.globsearch = false
 	gOpts.icons = false
 	gOpts.ignorecase = true
 	gOpts.ignoredia = true
+	gOpts.incfilter = false
 	gOpts.incsearch = false
 	gOpts.mouse = false
 	gOpts.number = false

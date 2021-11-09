@@ -372,13 +372,15 @@ func (app *app) loop() {
 		case d := <-app.nav.dirChan:
 			app.nav.checkDir(d)
 
-			prev, ok := app.nav.dirCache[d.path]
-			if ok {
-				d.ind = prev.ind
-				d.sel(prev.name(), app.nav.height)
-			}
+			if gOpts.dircache {
+				prev, ok := app.nav.dirCache[d.path]
+				if ok {
+					d.ind = prev.ind
+					d.sel(prev.name(), app.nav.height)
+				}
 
-			app.nav.dirCache[d.path] = d
+				app.nav.dirCache[d.path] = d
+			}
 
 			for i := range app.nav.dirs {
 				if app.nav.dirs[i].path == d.path {
@@ -493,6 +495,9 @@ func (app *app) runShell(s string, args []string, prefix string) {
 
 		err = cmd.Run()
 	case "%":
+		if app.ui.cmdPrefix == ">" {
+			return
+		}
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			log.Printf("writing stdin: %s", err)
@@ -522,6 +527,7 @@ func (app *app) runShell(s string, args []string, prefix string) {
 
 	switch prefix {
 	case "%":
+		normal(app)
 		app.cmd = cmd
 		app.cmdOutBuf = nil
 		app.ui.msg = ""

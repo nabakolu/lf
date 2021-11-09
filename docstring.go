@@ -66,6 +66,8 @@ The following commands are provided by lf:
     search-back    (modal)   (default '?')
     search-next              (default 'n')
     search-prev              (default 'N')
+    filter         (modal)
+    setfilter
     mark-save      (modal)   (default 'm')
     mark-load      (modal)   (default "'")
     mark-remove    (modal)   (default '"')
@@ -103,8 +105,10 @@ The following options can be used to customize the behavior of lf:
 
     anchorfind     bool      (default on)
     autoquit       bool      (default off)
+    dircache       bool      (default on)
     dircounts      bool      (default off)
     dirfirst       bool      (default on)
+    dironly        bool      (default off)
     drawbox        bool      (default off)
     errorfmt       string    (default "\033[7;31;47m%s\033[0m")
     filesep        string    (default "\n")
@@ -116,6 +120,7 @@ The following options can be used to customize the behavior of lf:
     ifs            string    (default '')
     ignorecase     bool      (default on)
     ignoredia      bool      (default on)
+    incfilter      bool      (default off)
     incsearch      bool      (default off)
     info           []string  (default '')
     mouse          bool      (default off)
@@ -408,6 +413,17 @@ direction and jump to the next/previous match.
 (See also 'globsearch', 'incsearch', 'wrapscan', 'ignorecase', 'smartcase',
 'ignoredia', and 'smartdia' options and 'Searching Files' section)
 
+    filter         (modal)
+    setfilter
+
+Read a pattern to filter out and only view files matching the pattern.
+setfilter does the same but uses an argument to set the filter immediatly.
+You can supply an argument to filter, in order to use that as the starting
+prompt.
+
+(See also 'globsearch', 'incfilter', 'ignorecase', 'smartcase', 'ignoredia',
+and 'smartdia' options)
+
     mark-save      (modal)   (default 'm')
 
 Save the current directory as a bookmark assigned to the given key.
@@ -525,6 +541,10 @@ beginning of file names, otherwise, it can match at an arbitrary position.
 
 Automatically quit server when there are no clients left connected.
 
+    dircache       bool      (default on)
+
+Cache directory contents.
+
     dircounts      bool      (default off)
 
 When this option is enabled, directory sizes show the number of items inside
@@ -540,6 +560,10 @@ directories are shown as '999+'.
     dirfirst       bool      (default on)
 
 Show directories first above regular files.
+
+    dironly        bool      (default off)
+
+Show only directories.
 
     drawbox        bool      (default off)
 
@@ -608,6 +632,10 @@ Ignore diacritics in sorting and search patterns.
 
 Jump to the first match after each keystroke during searching.
 
+    incfilter      bool      (default off)
+
+Apply filter pattern after each keystroke during filtering.
+
     info           []string  (default '')
 
 List of information shown for directory items at the right side of pane.
@@ -665,11 +693,11 @@ Preview clearing is disabled when the value of this option is left empty.
 
 Format string of the prompt shown in the top line. Special expansions are
 provided, '%u' as the user name, '%h' as the host name, '%w' as the working
-directory, '%d' as the working directory with a trailing path separator, and
-'%f' as the file name. Home folder is shown as '~' in the working directory
-expansion. Directory names are automatically shortened to a single character
-starting from the left most parent when the prompt does not fit to the
-screen.
+directory, '%d' as the working directory with a trailing path separator,
+'%f' as the file name, and '%F' as the current filter. Home folder is shown
+as '~' in the working directory expansion. Directory names are automatically
+shortened to a single character starting from the left most parent when the
+prompt does not fit to the screen.
 
     ratios         []int     (default '1:2:3')
 
@@ -1378,6 +1406,10 @@ add an extra call to make it run on startup as well:
 
 Note that all shell commands are possible but '%' and '&' are usually more
 appropriate as '$' and '!' causes flickers and pauses respectively.
+
+There is also a 'pre-cd' command, that works like 'on-cd', but is run before
+the directory is actually changed. It is generally a bad idea, to put
+movement commands (like 'up' / 'top' etc.) here.
 
 
 Colors

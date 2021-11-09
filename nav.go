@@ -113,7 +113,9 @@ type dir struct {
 	files       []*file   // displayed files in directory including or excluding hidden ones
 	allFiles    []*file   // all files in directory including hidden ones (same array as files)
 	sortType    sortType  // sort method and options from last sort
+	dironly     bool      // dironly value from last sort
 	hiddenfiles []string  // hiddenfiles value from last sort
+	filter      []string  // last filter for this directory
 	ignorecase  bool      // ignorecase value from last sort
 	ignoredia   bool      // ignoredia value from last sort
 	noPerm      bool      // whether lf has no permission to open the directory
@@ -150,6 +152,7 @@ func normalize(s1, s2 string, ignorecase, ignoredia bool) (string, string) {
 
 func (dir *dir) sort() {
 	dir.sortType = gOpts.sortType
+	dir.dironly = gOpts.dironly
 	dir.hiddenfiles = gOpts.hiddenfiles
 	dir.ignorecase = gOpts.ignorecase
 	dir.ignoredia = gOpts.ignoredia
@@ -219,6 +222,26 @@ func (dir *dir) sort() {
 		})
 	}
 
+	// when dironly option is enabled, we move files to the beginning of our file
+	// list and then set the beginning of displayed files to the first directory
+	// in the list
+	if dir.dironly {
+		sort.SliceStable(dir.files, func(i, j int) bool {
+			if !dir.files[i].IsDir() && !dir.files[j].IsDir() {
+				return i < j
+			}
+			return !dir.files[i].IsDir()
+		})
+		dir.files = func() []*file {
+			for i, f := range dir.files {
+				if f.IsDir() {
+					return dir.files[i:]
+				}
+			}
+			return dir.files[len(dir.files):]
+		}()
+	}
+
 	// when hidden option is disabled, we move hidden files to the
 	// beginning of our file list and then set the beginning of displayed
 	// files to the first non-hidden file in the list
@@ -232,20 +255,40 @@ func (dir *dir) sort() {
 		for i, f := range dir.files {
 			if !isHidden(f, dir.path, dir.hiddenfiles) {
 				dir.files = dir.files[i:]
-				return
+				break
 			}
 		}
-		dir.files = dir.files[len(dir.files):]
+		if len(dir.files) > 0 && isHidden(dir.files[len(dir.files)-1], dir.path, dir.hiddenfiles) {
+			dir.files = dir.files[len(dir.files):]
+		}
 	}
+
+	if len(dir.filter) != 0 {
+		sort.SliceStable(dir.files, func(i, j int) bool {
+			if isFiltered(dir.files[i], dir.filter) && isFiltered(dir.files[j], dir.filter) {
+				return i < j
+			}
+			return isFiltered(dir.files[i], dir.filter)
+		})
+		for i, f := range dir.files {
+			if !isFiltered(f, dir.filter) {
+				dir.files = dir.files[i:]
+				break
+			}
+		}
+		if len(dir.files) > 0 && isFiltered(dir.files[len(dir.files)-1], dir.filter) {
+			dir.files = dir.files[len(dir.files):]
+		}
+	}
+
+	dir.ind = max(dir.ind, 0)
+	dir.ind = min(dir.ind, len(dir.files)-1)
 }
 
 func (dir *dir) name() string {
 	if len(dir.files) == 0 {
 		return ""
 	}
-
-	dir.ind = max(dir.ind, 0)
-	dir.ind = min(dir.ind, len(dir.files)-1)
 
 	return dir.files[dir.ind].Name()
 }
@@ -307,34 +350,44 @@ type nav struct {
 	searchBack      bool
 	searchInd       int
 	searchPos       int
+	prevFilter      []string
 	volatilePreview bool
 }
 
-func (nav *nav) loadDir(path string) *dir {
-	d, ok := nav.dirCache[path]
-	if !ok {
-		d := &dir{
-			loading:     true,
-			loadTime:    time.Now(),
-			path:        path,
-			sortType:    gOpts.sortType,
-			hiddenfiles: gOpts.hiddenfiles,
-			ignorecase:  gOpts.ignorecase,
-			ignoredia:   gOpts.ignoredia,
-		}
-		nav.dirCache[path] = d
-		go func() {
-			d := newDir(path)
-			d.sort()
-			d.ind, d.pos = 0, 0
-			nav.dirChan <- d
-		}()
-		return d
+func (nav *nav) loadDirInternal(path string) *dir {
+	d := &dir{
+		loading:     true,
+		loadTime:    time.Now(),
+		path:        path,
+		sortType:    gOpts.sortType,
+		hiddenfiles: gOpts.hiddenfiles,
+		ignorecase:  gOpts.ignorecase,
+		ignoredia:   gOpts.ignoredia,
 	}
-
-	nav.checkDir(d)
-
+	go func() {
+		d := newDir(path)
+		d.sort()
+		d.ind, d.pos = 0, 0
+		nav.dirChan <- d
+	}()
 	return d
+}
+
+func (nav *nav) loadDir(path string) *dir {
+	if gOpts.dircache {
+		d, ok := nav.dirCache[path]
+		if !ok {
+			d = nav.loadDirInternal(path)
+			nav.dirCache[path] = d
+			return d
+		}
+
+		nav.checkDir(d)
+
+		return d
+	} else {
+		return nav.loadDirInternal(path)
+	}
 }
 
 func (nav *nav) checkDir(dir *dir) {
@@ -358,10 +411,12 @@ func (nav *nav) checkDir(dir *dir) {
 		dir.loadTime = now
 		go func() {
 			nd := newDir(dir.path)
+			nd.filter = dir.filter
 			nd.sort()
 			nav.dirChan <- nd
 		}()
 	case dir.sortType != gOpts.sortType ||
+		dir.dironly != gOpts.dironly ||
 		!reflect.DeepEqual(dir.hiddenfiles, gOpts.hiddenfiles) ||
 		dir.ignorecase != gOpts.ignorecase ||
 		dir.ignoredia != gOpts.ignoredia:
@@ -599,6 +654,27 @@ func (nav *nav) sort() {
 		d.sort()
 		d.sel(name, nav.height)
 	}
+}
+
+func (nav *nav) setFilter(filter []string) error {
+	newfilter := []string{}
+	for _, tok := range filter {
+		_, err := filepath.Match(tok, "a")
+		if err != nil {
+			return err
+		}
+		if tok != "" {
+			newfilter = append(newfilter, tok)
+		}
+	}
+	dir := nav.currDir()
+	dir.filter = newfilter
+
+	// Apply filter, by sorting current dir (see nav.sort())
+	name := dir.name()
+	dir.sort()
+	dir.sel(name, nav.height)
+	return nil
 }
 
 func (nav *nav) up(dist int) bool {
@@ -1251,6 +1327,22 @@ func (nav *nav) searchPrev() (bool, error) {
 	return false, nil
 }
 
+func isFiltered(f os.FileInfo, filter []string) bool {
+	for _, pattern := range filter {
+		matched, err := searchMatch(f.Name(), strings.TrimPrefix(pattern, "!"))
+		if err != nil {
+			log.Printf("Filter Error: %s", err)
+			return false
+		}
+		if strings.HasPrefix(pattern, "!") && matched {
+			return true
+		} else if !strings.HasPrefix(pattern, "!") && !matched {
+			return true
+		}
+	}
+	return false
+}
+
 func (nav *nav) removeMark(mark string) error {
 	if _, ok := nav.marks[mark]; ok {
 		delete(nav.marks, mark)
@@ -1322,6 +1414,7 @@ func (nav *nav) currFile() (*file, error) {
 	if len(dir.files) == 0 {
 		return nil, fmt.Errorf("empty directory")
 	}
+
 	return dir.files[dir.ind], nil
 }
 
