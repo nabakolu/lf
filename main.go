@@ -30,7 +30,6 @@ var (
 	gSocketProt    string
 	gSocketPath    string
 	gLogPath       string
-	gServerLogPath string
 	gSelect        string
 	gConfigPath    string
 	gCommands      arrayFlag
@@ -185,6 +184,18 @@ func checkServer() {
 }
 
 func main() {
+	flag.Usage = func() {
+		f := flag.CommandLine.Output()
+		fmt.Fprintln(f, "lf - Terminal file manager")
+		fmt.Fprintln(f, "")
+		fmt.Fprintf(f, "Usage:  %s [options] [select-path]\n\n", os.Args[0])
+		fmt.Fprintln(f, "  select-path")
+		fmt.Fprintln(f, "        set the initial file selection to the given argument")
+		fmt.Fprintln(f, "")
+		fmt.Fprintln(f, "Options:")
+		flag.PrintDefaults()
+	}
+
 	showDoc := flag.Bool(
 		"doc",
 		false,
@@ -239,6 +250,11 @@ func main() {
 		"command",
 		"command to execute on client initialization")
 
+	flag.StringVar(&gLogPath,
+		"log",
+		"",
+		"path to the log file to write messages")
+
 	flag.Parse()
 
 	gSocketProt = gDefaultSocketProt
@@ -265,8 +281,15 @@ func main() {
 			log.Fatalf("remote command: %s", err)
 		}
 	case *serverMode:
+		if gLogPath != "" && !filepath.IsAbs(gLogPath) {
+			wd, err := os.Getwd()
+			if err != nil {
+				log.Fatalf("getting current directory: %s", err)
+			} else {
+				gLogPath = filepath.Join(wd, gLogPath)
+			}
+		}
 		os.Chdir(gUser.HomeDir)
-		gServerLogPath = filepath.Join(os.TempDir(), fmt.Sprintf("lf.%s.server.log", gUser.Username))
 		serve()
 	default:
 		gSingleMode = *singleMode
@@ -276,7 +299,7 @@ func main() {
 		}
 
 		gClientID = os.Getpid()
-		gLogPath = filepath.Join(os.TempDir(), fmt.Sprintf("lf.%s.%d.log", gUser.Username, gClientID))
+
 		switch flag.NArg() {
 		case 0:
 			_, err := os.Getwd()

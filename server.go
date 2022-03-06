@@ -16,14 +16,20 @@ var (
 )
 
 func serve() {
-	f, err := os.Create(gServerLogPath)
-	if err != nil {
-		panic(err)
+	if gLogPath != "" {
+		f, err := os.OpenFile(gLogPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		log.SetOutput(f)
 	}
-	defer f.Close()
-	log.SetOutput(f)
 
 	log.Print("hi!")
+
+	if gSocketProt == "unix" {
+		setUserUmask()
+	}
 
 	l, err := net.Listen(gSocketProt, gSocketPath)
 	if err != nil {

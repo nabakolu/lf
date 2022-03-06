@@ -279,9 +279,9 @@ var gThisYear = time.Now().Year()
 
 func infotimefmt(t time.Time) string {
 	if t.Year() == gThisYear {
-		return t.Format("Jan _2 15:04")
+		return t.Format(gOpts.infotimefmtnew)
 	}
-	return t.Format("Jan _2  2006")
+	return t.Format(gOpts.infotimefmtold)
 }
 
 func fileInfo(f *file, d *dir) string {
@@ -292,8 +292,14 @@ func fileInfo(f *file, d *dir) string {
 	for _, s := range gOpts.info {
 		switch s {
 		case "size":
-			if !(gOpts.dircounts && f.IsDir()) {
-				info = fmt.Sprintf("%s %4s", info, humanize(f.Size()))
+			if !(f.IsDir() && gOpts.dircounts) {
+				var sz string
+				if f.IsDir() && f.dirSize < 0 {
+					sz = "-"
+				} else {
+					sz = humanize(f.TotalSize())
+				}
+				info = fmt.Sprintf("%s %4s", info, sz)
 				continue
 			}
 
@@ -322,11 +328,11 @@ func fileInfo(f *file, d *dir) string {
 				info = fmt.Sprintf("%s 999+", info)
 			}
 		case "time":
-			info = fmt.Sprintf("%s %12s", info, infotimefmt(f.ModTime()))
+			info = fmt.Sprintf("%s %*s", info, max(len(gOpts.infotimefmtnew), len(gOpts.infotimefmtold)), infotimefmt(f.ModTime()))
 		case "atime":
-			info = fmt.Sprintf("%s %12s", info, infotimefmt(f.accessTime))
+			info = fmt.Sprintf("%s %*s", info, max(len(gOpts.infotimefmtnew), len(gOpts.infotimefmtold)), infotimefmt(f.accessTime))
 		case "ctime":
-			info = fmt.Sprintf("%s %12s", info, infotimefmt(f.changeTime))
+			info = fmt.Sprintf("%s %*s", info, max(len(gOpts.infotimefmtnew), len(gOpts.infotimefmtold)), infotimefmt(f.changeTime))
 		default:
 			log.Printf("unknown info type: %s", s)
 		}

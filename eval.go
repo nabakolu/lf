@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
 )
 
 func (e *setExpr) eval(app *app, args []string) {
+	// from app only app.ui.echo*() may be used inside this function
 	switch e.opt {
 	case "anchorfind":
 		gOpts.anchorfind = true
@@ -40,91 +40,70 @@ func (e *setExpr) eval(app *app, args []string) {
 		gOpts.dircounts = !gOpts.dircounts
 	case "dironly":
 		gOpts.dironly = true
-		app.nav.sort()
-		app.nav.position()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.pos = true
+		gInvalidate.dir = true
 	case "nodironly":
 		gOpts.dironly = false
-		app.nav.sort()
-		app.nav.position()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.pos = true
+		gInvalidate.dir = true
 	case "dironly!":
 		gOpts.dironly = !gOpts.dironly
-		app.nav.sort()
-		app.nav.position()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.pos = true
+		gInvalidate.dir = true
 	case "dirfirst":
 		gOpts.sortType.option |= dirfirstSort
-		app.nav.sort()
-		app.ui.sort()
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "nodirfirst":
 		gOpts.sortType.option &= ^dirfirstSort
-		app.nav.sort()
-		app.ui.sort()
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "dirfirst!":
 		gOpts.sortType.option ^= dirfirstSort
-		app.nav.sort()
-		app.ui.sort()
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "drawbox":
 		gOpts.drawbox = true
-		app.ui.renew()
-		if app.nav.height != app.ui.wins[0].h {
-			app.nav.height = app.ui.wins[0].h
-			app.nav.regCache = make(map[string]*reg)
-		}
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.navSize = true
+		gInvalidate.dir = true
 	case "nodrawbox":
 		gOpts.drawbox = false
-		app.ui.renew()
-		if app.nav.height != app.ui.wins[0].h {
-			app.nav.height = app.ui.wins[0].h
-			app.nav.regCache = make(map[string]*reg)
-		}
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.navSize = true
+		gInvalidate.dir = true
 	case "drawbox!":
 		gOpts.drawbox = !gOpts.drawbox
-		app.ui.renew()
-		if app.nav.height != app.ui.wins[0].h {
-			app.nav.height = app.ui.wins[0].h
-			app.nav.regCache = make(map[string]*reg)
-		}
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.navSize = true
+		gInvalidate.dir = true
 	case "globsearch":
 		gOpts.globsearch = true
-		app.nav.sort()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "noglobsearch":
 		gOpts.globsearch = false
-		app.nav.sort()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "globsearch!":
 		gOpts.globsearch = !gOpts.globsearch
-		app.nav.sort()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "hidden":
 		gOpts.sortType.option |= hiddenSort
-		app.nav.sort()
-		app.nav.position()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.pos = true
+		gInvalidate.dir = true
 	case "nohidden":
 		gOpts.sortType.option &= ^hiddenSort
-		app.nav.sort()
-		app.nav.position()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.pos = true
+		gInvalidate.dir = true
 	case "hidden!":
 		gOpts.sortType.option ^= hiddenSort
-		app.nav.sort()
-		app.nav.position()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.pos = true
+		gInvalidate.dir = true
 	case "icons":
 		gOpts.icons = true
 	case "noicons":
@@ -133,31 +112,28 @@ func (e *setExpr) eval(app *app, args []string) {
 		gOpts.icons = !gOpts.icons
 	case "ignorecase":
 		gOpts.ignorecase = true
-		app.nav.sort()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "noignorecase":
 		gOpts.ignorecase = false
-		app.nav.sort()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "ignorecase!":
 		gOpts.ignorecase = !gOpts.ignorecase
-		app.nav.sort()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "ignoredia":
 		gOpts.ignoredia = true
-		app.nav.sort()
-		app.ui.sort()
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "noignoredia":
 		gOpts.ignoredia = false
-		app.nav.sort()
-		app.ui.sort()
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "ignoredia!":
 		gOpts.ignoredia = !gOpts.ignoredia
-		app.nav.sort()
-		app.ui.sort()
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "incfilter":
 		gOpts.incfilter = true
 	case "noincfilter":
@@ -173,21 +149,20 @@ func (e *setExpr) eval(app *app, args []string) {
 	case "mouse":
 		if !gOpts.mouse {
 			gOpts.mouse = true
-			app.ui.screen.EnableMouse()
+			gInvalidate.mouse = true
 		}
 	case "nomouse":
 		if gOpts.mouse {
 			gOpts.mouse = false
-			app.ui.screen.DisableMouse()
+			gInvalidate.mouse = true
 		}
 	case "mouse!":
 		if gOpts.mouse {
 			gOpts.mouse = false
-			app.ui.screen.DisableMouse()
 		} else {
 			gOpts.mouse = true
-			app.ui.screen.EnableMouse()
 		}
+		gInvalidate.mouse = true
 	case "number":
 		gOpts.number = true
 	case "nonumber":
@@ -216,31 +191,28 @@ func (e *setExpr) eval(app *app, args []string) {
 		gOpts.relativenumber = !gOpts.relativenumber
 	case "reverse":
 		gOpts.sortType.option |= reverseSort
-		app.nav.sort()
-		app.ui.sort()
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "noreverse":
 		gOpts.sortType.option &= ^reverseSort
-		app.nav.sort()
-		app.ui.sort()
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "reverse!":
 		gOpts.sortType.option ^= reverseSort
-		app.nav.sort()
-		app.ui.sort()
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "smartcase":
 		gOpts.smartcase = true
-		app.nav.sort()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "nosmartcase":
 		gOpts.smartcase = false
-		app.nav.sort()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "smartcase!":
 		gOpts.smartcase = !gOpts.smartcase
-		app.nav.sort()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.dir = true
 	case "smartdia":
 		gOpts.smartdia = true
 	case "nosmartdia":
@@ -283,12 +255,7 @@ func (e *setExpr) eval(app *app, args []string) {
 			return
 		}
 		gOpts.period = n
-		if n == 0 {
-			app.ticker.Stop()
-		} else {
-			app.ticker.Stop()
-			app.ticker = time.NewTicker(time.Duration(gOpts.period) * time.Second)
-		}
+		gInvalidate.period = true
 	case "scrolloff":
 		n, err := strconv.Atoi(e.val)
 		if err != nil {
@@ -329,10 +296,9 @@ func (e *setExpr) eval(app *app, args []string) {
 			}
 		}
 		gOpts.hiddenfiles = toks
-		app.nav.sort()
-		app.nav.position()
-		app.ui.sort()
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.sort = true
+		gInvalidate.pos = true
+		gInvalidate.dir = true
 	case "ifs":
 		gOpts.ifs = e.val
 	case "info":
@@ -377,7 +343,7 @@ func (e *setExpr) eval(app *app, args []string) {
 		}
 		gOpts.ratios = rats
 		app.ui.wins = getWins(app.ui.screen)
-		app.ui.loadFile(app.nav, true)
+		gInvalidate.dir = true
 	case "shell":
 		gOpts.shell = e.val
 	case "shellflag":
@@ -408,10 +374,20 @@ func (e *setExpr) eval(app *app, args []string) {
 			app.ui.echoerr("sortby: value should either be 'natural', 'name', 'size', 'time', 'atime', 'ctime' or 'ext'")
 			return
 		}
-		app.nav.sort()
-		app.ui.sort()
+		gInvalidate.sort = true
+		gInvalidate.dir = true
+	case "tempmarks":
+		if e.val != "" {
+			gOpts.tempmarks = "'" + e.val
+		} else {
+			gOpts.tempmarks = "'"
+		}
 	case "timefmt":
 		gOpts.timefmt = e.val
+	case "infotimefmtnew":
+		gOpts.infotimefmtnew = e.val
+	case "infotimefmtold":
+		gOpts.infotimefmtold = e.val
 	case "truncatechar":
 		if runeSliceWidth([]rune(e.val)) != 1 {
 			app.ui.echoerr("truncatechar: value should be a single character")
@@ -423,7 +399,6 @@ func (e *setExpr) eval(app *app, args []string) {
 		app.ui.echoerrf("unknown option: %s", e.opt)
 		return
 	}
-	app.ui.loadFileInfo(app.nav)
 }
 
 func (e *mapExpr) eval(app *app, args []string) {
@@ -432,7 +407,6 @@ func (e *mapExpr) eval(app *app, args []string) {
 	} else {
 		gOpts.keys[e.keys] = e.expr
 	}
-	app.ui.loadFileInfo(app.nav)
 }
 
 func (e *cmapExpr) eval(app *app, args []string) {
@@ -441,7 +415,6 @@ func (e *cmapExpr) eval(app *app, args []string) {
 	} else {
 		gOpts.cmdkeys[e.key] = e.expr
 	}
-	app.ui.loadFileInfo(app.nav)
 }
 
 func (e *cmdExpr) eval(app *app, args []string) {
@@ -450,7 +423,6 @@ func (e *cmdExpr) eval(app *app, args []string) {
 	} else {
 		gOpts.cmds[e.name] = e.expr
 	}
-	app.ui.loadFileInfo(app.nav)
 }
 
 func preChdir(app *app) {
@@ -460,6 +432,7 @@ func preChdir(app *app) {
 }
 
 func onChdir(app *app) {
+	app.nav.addJumpList()
 	if cmd, ok := gOpts.cmds["on-cd"]; ok {
 		cmd.eval(app, nil)
 	}
@@ -545,7 +518,7 @@ func restartIncCmd(app *app) {
 	}
 }
 
-func resetIncCmd(app *app)  {
+func resetIncCmd(app *app) {
 	if gOpts.incsearch && (app.ui.cmdPrefix == "/" || app.ui.cmdPrefix == "?") {
 		dir := app.nav.currDir()
 		dir.pos = app.nav.searchPos
@@ -796,6 +769,11 @@ func (e *callExpr) eval(app *app, args []string) {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
+	case "scrollup":
+		if app.nav.scrollup(e.count) {
+			app.ui.loadFile(app.nav, true)
+			app.ui.loadFileInfo(app.nav)
+		}
 	case "down":
 		if app.nav.down(e.count) {
 			app.ui.loadFile(app.nav, true)
@@ -808,6 +786,11 @@ func (e *callExpr) eval(app *app, args []string) {
 		}
 	case "page-down":
 		if app.nav.down(e.count * app.nav.height) {
+			app.ui.loadFile(app.nav, true)
+			app.ui.loadFileInfo(app.nav)
+		}
+	case "scrolldown":
+		if app.nav.scrolldown(e.count) {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
@@ -874,6 +857,26 @@ func (e *callExpr) eval(app *app, args []string) {
 		if cmd, ok := gOpts.cmds["open"]; ok {
 			cmd.eval(app, e.args)
 		}
+	case "jump-prev":
+		resetIncCmd(app)
+		preChdir(app)
+		for i := 0; i < e.count; i++ {
+			app.nav.cdJumpListPrev()
+		}
+		app.ui.loadFile(app.nav, true)
+		app.ui.loadFileInfo(app.nav)
+		restartIncCmd(app)
+		onChdir(app)
+	case "jump-next":
+		resetIncCmd(app)
+		preChdir(app)
+		for i := 0; i < e.count; i++ {
+			app.nav.cdJumpListNext()
+		}
+		app.ui.loadFile(app.nav, true)
+		app.ui.loadFileInfo(app.nav)
+		restartIncCmd(app)
+		onChdir(app)
 	case "quit":
 		app.quitChan <- struct{}{}
 	case "top":
@@ -907,6 +910,15 @@ func (e *callExpr) eval(app *app, args []string) {
 		app.nav.invert()
 	case "unselect":
 		app.nav.unselect()
+	case "calcdirsize":
+		err := app.nav.getDirSize()
+		if err != nil {
+			app.ui.echoerrf("calcdirsize: %s", err)
+			return
+		}
+		app.ui.loadFileInfo(app.nav)
+		app.nav.sort()
+		app.ui.sort()
 	case "copy":
 		if err := app.nav.save(true); err != nil {
 			app.ui.echoerrf("copy: %s", err)
@@ -1244,6 +1256,7 @@ func (e *callExpr) eval(app *app, args []string) {
 		if err != nil {
 			log.Printf("getting current directory: %s", err)
 		}
+		log.Printf("todo-cd-eval %s", wd)
 
 		path = replaceTilde(path)
 		if !filepath.IsAbs(path) {
@@ -1732,7 +1745,12 @@ func (e *callExpr) eval(app *app, args []string) {
 		update(app)
 	case "cmd-interrupt":
 		if app.cmd != nil {
-			app.cmd.Process.Kill()
+			err := shellKill(app.cmd)
+			if err != nil {
+				app.ui.echoerrf("kill: %s", err)
+			} else {
+				app.ui.echoerr("process interrupt")
+			}
 		}
 		normal(app)
 	case "cmd-word":

@@ -6,7 +6,7 @@ lf is a terminal file manager.
 
 Source code can be found in the repository at https://github.com/gokcehan/lf.
 
-This documentation can either be read from terminal using 'lf -doc' or online at https://godoc.org/github.com/gokcehan/lf.
+This documentation can either be read from terminal using 'lf -doc' or online at https://pkg.go.dev/github.com/gokcehan/lf.
 You can also use 'doc' command (default '<f-1>') inside lf to view the documentation in a pager.
 
 You can run 'lf -help' to see descriptions of command line options.
@@ -19,9 +19,11 @@ The following commands are provided by lf:
     up                       (default 'k' and '<up>')
     half-up                  (default '<c-u>')
     page-up                  (default '<c-b>' and '<pgup>')
+    scrollup                 (default '<c-y>')
     down                     (default 'j' and '<down>')
     half-down                (default '<c-d>')
     page-down                (default '<c-f>' and '<pgdn>')
+    scrolldown               (default '<c-e>')
     updir                    (default 'h' and '<left>')
     open                     (default 'l' and '<right>')
     top                      (default 'gg' and '<home>')
@@ -31,6 +33,7 @@ The following commands are provided by lf:
     unselect                 (default 'u')
     glob-select
     glob-unselect
+    calcdirsize
     copy                     (default 'y')
     cut                      (default 'd')
     paste                    (default 'p')
@@ -137,7 +140,10 @@ The following options can be used to customize the behavior of lf:
     smartdia       bool      (default off)
     sortby         string    (default 'natural')
     tabstop        int       (default 8)
+    tempmarks      string    (default '')
     timefmt        string    (default 'Mon Jan _2 15:04:05 2006')
+    infotimefmtnew string    (default 'Jan _2 15:04')
+    infotimefmtold string    (default 'Jan _2  2006')
     truncatechar   string    (default '~')
     waitmsg        string    (default 'Press any key to continue')
     wrapscan       bool      (default on)
@@ -190,6 +196,16 @@ Configuration files should be located at:
     unix     /etc/lf/lfrc            ~/.config/lf/lfrc
     windows  C:\ProgramData\lf\lfrc  C:\Users\<user>\AppData\Local\lf\lfrc
 
+Colors file should be located at:
+
+    unix     ~/.local/share/lf/colors
+    windows  C:\Users\<user>\AppData\Local\lf\colors
+
+Icons file should be located at:
+
+    unix     ~/.local/share/lf/icons
+    windows  C:\Users\<user>\AppData\Local\lf\icons
+
 Selection file should be located at:
 
     unix     ~/.local/share/lf/files
@@ -228,9 +244,11 @@ Quit lf and return to the shell.
     up                       (default 'k' and '<up>')
     half-up                  (default '<c-u>')
     page-up                  (default '<c-b>' and '<pgup>')
+    scrollup                 (default '<c-y>')
     down                     (default 'j' and '<down>')
     half-down                (default '<c-d>')
     page-down                (default '<c-f>' and '<pgdn>')
+    scrolldown               (default '<c-e>')
 
 Move the current file selection upwards/downwards by one/half a page/full page.
 
@@ -245,6 +263,14 @@ A default 'open' command is provided to call the default system opener asynchron
 A custom 'open' command can be defined to override this default.
 
 (See also 'OPENER' variable and 'Opening Files' section)
+
+    jump-prev                (default '[')
+
+Change the current working directory to the previous jumplist item.
+
+    jump-next                (default ']')
+
+Change the current working directory to the next jumplist item.
 
     top                      (default 'gg' and '<home>')
     bottom                   (default 'G' and '<end>')
@@ -272,6 +298,10 @@ Select files that match the given glob.
     glob-unselect
 
 Unselect files that match the given glob.
+
+    calcdirsize
+
+Get the total size for each of the selected directories.
 
     copy                     (default 'y')
 
@@ -708,9 +738,21 @@ Currently supported sort types are 'natural', 'name', 'size', 'time', 'ctime', '
 
 Number of space characters to show for horizontal tabulation (U+0009) character.
 
+    tempmarks      string    (default '')
+
+A string that lists all marks to treat as temporary. They are not synced to other clients and are not saved in the bookmarks file. This option should be specified only in the global config file ("lfrc") as it may otherwise cause unintended side effects. Please note that the special bookmark "'" is always treated as temporary and does not need to be specified.
+
     timefmt        string    (default 'Mon Jan _2 15:04:05 2006')
 
 Format string of the file modification time shown in the bottom line.
+
+    infotimefmtnew string    (default 'Jan _2 15:04')
+
+Format string of the file time shown in the info column when it matches this year.
+
+    infotimefmtold string    (default 'Jan _2  2006')
+
+Format string of the file time shown in the info column when it doesn't match this year.
 
     truncatechar   string    (default '~')
 
@@ -1021,7 +1063,7 @@ To use this feature, you need to use a client which supports communicating with 
 OpenBSD implementation of netcat (nc) is one such example.
 You can use it to send a command to the socket file:
 
-    echo 'send echo hello world' | nc -U /tmp/lf.${USER}.sock
+    echo 'send echo hello world' | nc -U ${XDG_RUNTIME_DIR:-/tmp}/lf.${USER}.sock
 
 Since such a client may not be available everywhere, lf comes bundled with a command line flag to be used as such.
 When using lf, you do not need to specify the address of the socket file.
@@ -1093,9 +1135,9 @@ You can use the following example as a starting point:
             cp -R $list .
         elif [ $mode = 'move' ]; then
             mv $list .
+            rm ~/.local/share/lf/files
+            lf -remote 'send clear'
         fi
-	rm ~/.local/share/lf/files
-        lf -remote 'send clear'
     }}
 
 Some useful things to be considered are to use the backup ('--backup') and/or preserve attributes ('-a') options with 'cp' and 'mv' commands if they support it (i.e. GNU implementation), change the command type to asynchronous, or use 'rsync' command with progress bar option for copying and feed the progress to the client periodically with remote 'echo' calls.
@@ -1269,17 +1311,20 @@ Colors are set in the following order:
     2. LSCOLORS (Mac/BSD ls)
     3. LS_COLORS (GNU ls)
     4. LF_COLORS (lf specific)
+    5. colors file (lf specific)
 
 Please refer to the corresponding man pages for more information about 'LSCOLORS' and 'LS_COLORS'.
 'LF_COLORS' is provided with the same syntax as 'LS_COLORS' in case you want to configure colors only for lf but not ls.
 This can be useful since there are some differences between ls and lf, though one should expect the same behavior for common cases.
+Colors file is provided for easier configuration without environment variables.
+This file should consist of whitespace separated pairs with '#' character to start comments until the end of line.
 
 You can configure lf colors in two different ways.
 First, you can only configure 8 basic colors used by your terminal and lf should pick up those colors automatically.
 Depending on your terminal, you should be able to select your colors from a 24-bit palette.
 This is the recommended approach as colors used by other programs will also match each other.
 
-Second, you can set the values of environmental variables mentioned above for fine grained customization.
+Second, you can set the values of environment variables mentioned above for fine grained customization.
 Note that 'LS_COLORS/LF_COLORS' are more powerful than 'LSCOLORS' and they can be used even when GNU programs are not installed on the system.
 You can combine this second method with the first method for best results.
 
@@ -1317,10 +1362,11 @@ The full order of matchings from most specific to least are as follows:
     1. Full Path (e.g. '~/.config/lf/lfrc')
     2. Dir Name  (e.g. '.git/') (only matches dirs with a trailing slash at the end)
     3. File Type (e.g. 'ln') (except 'fi')
-    4. File Name (e.g. '.git*') (only matches files with a trailing star at the end)
-    5. Base Name (e.g. 'README.*')
-    6. Extension (e.g. '*.txt')
-    7. Default   (i.e. 'fi')
+    4. File Name (e.g. 'README*')
+    5. File Name (e.g. '*README')
+    6. Base Name (e.g. 'README.*')
+    7. Extension (e.g. '*.txt')
+    8. Default   (i.e. 'fi')
 
 For example, given a regular text file '/path/to/README.txt', the following entries are checked in the configuration and the first one to match is used:
 
@@ -1328,9 +1374,10 @@ For example, given a regular text file '/path/to/README.txt', the following entr
     2. (skipped since the file is not a directory)
     3. (skipped since the file is of type 'fi')
     4. 'README.txt*'
-    5. 'README.*'
-    6. '*.txt'
-    7. 'fi'
+    5. '*README.txt'
+    6. 'README.*'
+    7. '*.txt'
+    8. 'fi'
 
 Given a regular directory '/path/to/example.d', the following entries are checked in the configuration and the first one to match is used:
 
@@ -1338,15 +1385,16 @@ Given a regular directory '/path/to/example.d', the following entries are checke
     2. 'example.d/'
     3. 'di'
     4. 'example.d*'
-    5. 'example.*'
-    6. '*.d'
-    7. 'fi'
+    5. '*example.d'
+    6. 'example.*'
+    7. '*.d'
+    8. 'fi'
 
 Note that glob-like patterns do not actually perform glob matching due to performance reasons.
 
 For example, you can set a variable as follows:
 
-    export LF_COLORS="~/Documents=01;31:~/Downloads=01;31:~/.local/share=01;31:~/.config/lf/lfrc=31:.git/=01;32:.git=32:.gitignore=32:Makefile=32:README.*=33:*.txt=34:*.md=34:ln=01;36:di=01;34:ex=01;32:"
+    export LF_COLORS="~/Documents=01;31:~/Downloads=01;31:~/.local/share=01;31:~/.config/lf/lfrc=31:.git/=01;32:.git*=32:*.gitignore=32:*Makefile=32:README.*=33:*.txt=34:*.md=34:ln=01;36:di=01;34:ex=01;32:"
 
 Having all entries on a single line can make it hard to read.
 You may instead divide it to multiple lines in between double quotes by escaping newlines with backslashes as follows:
@@ -1357,9 +1405,9 @@ You may instead divide it to multiple lines in between double quotes by escaping
     ~/.local/share=01;31:\
     ~/.config/lf/lfrc=31:\
     .git/=01;32:\
-    .git=32:\
-    .gitignore=32:\
-    Makefile=32:\
+    .git*=32:\
+    *.gitignore=32:\
+    *Makefile=32:\
     README.*=33:\
     *.txt=34:\
     *.md=34:\
@@ -1378,9 +1426,10 @@ https://en.wikipedia.org/wiki/ANSI_escape_code.
 
 Icons
 
-Icons are configured using 'LF_ICONS' environment variable.
-This variable uses the same syntax as 'LS_COLORS/LF_COLORS'.
+Icons are configured using 'LF_ICONS' environment variable or an icons file.
+The variable uses the same syntax as 'LS_COLORS/LF_COLORS'.
 Instead of colors, you should put a single characters as values of entries.
+Icons file should consist of whitespace separated pairs with '#' character to start comments until the end of line.
 Do not forget to enable 'icons' option to see the icons.
 Default values are as follows given with their matching order in lf:
 

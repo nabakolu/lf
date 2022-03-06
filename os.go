@@ -1,9 +1,10 @@
-// +build !windows
+//go:build !windows
 
 package main
 
 import (
 	"fmt"
+	"golang.org/x/sys/unix"
 	"log"
 	"os"
 	"os/exec"
@@ -11,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 )
 
 var (
@@ -31,6 +31,8 @@ var (
 var (
 	gUser        *user.User
 	gConfigPaths []string
+	gColorsPaths []string
+	gIconsPaths  []string
 	gFilesPath   string
 	gMarksPath   string
 	gHistoryPath string
@@ -79,6 +81,16 @@ func init() {
 		filepath.Join(config, "lf", "lfrc"),
 	}
 
+	gColorsPaths = []string{
+		filepath.Join("/etc", "lf", "colors"),
+		filepath.Join(config, "lf", "colors"),
+	}
+
+	gIconsPaths = []string{
+		filepath.Join("/etc", "lf", "icons"),
+		filepath.Join(config, "lf", "icons"),
+	}
+
 	data := os.Getenv("XDG_DATA_HOME")
 	if data == "" {
 		data = filepath.Join(gUser.HomeDir, ".local", "share")
@@ -88,12 +100,17 @@ func init() {
 	gMarksPath = filepath.Join(data, "lf", "marks")
 	gHistoryPath = filepath.Join(data, "lf", "history")
 
-	gDefaultSocketPath = filepath.Join(os.TempDir(), fmt.Sprintf("lf.%s.sock", gUser.Username))
+	runtime := os.Getenv("XDG_RUNTIME_DIR")
+	if runtime == "" {
+		runtime = os.TempDir()
+	}
+
+	gDefaultSocketPath = filepath.Join(runtime, fmt.Sprintf("lf.%s.sock", gUser.Username))
 }
 
 func detachedCommand(name string, arg ...string) *exec.Cmd {
 	cmd := exec.Command(name, arg...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
 	return cmd
 }
 
@@ -109,6 +126,22 @@ func shellCommand(s string, args []string) *exec.Cmd {
 	return exec.Command(gOpts.shell, args...)
 }
 
+func shellSetPG(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &unix.SysProcAttr{Setpgid: true}
+}
+
+func shellKill(cmd *exec.Cmd) error {
+	pgid, err := unix.Getpgid(cmd.Process.Pid)
+	if err == nil && cmd.Process.Pid == pgid {
+		// kill the process group
+		err = unix.Kill(-pgid, 15)
+		if err == nil {
+			return nil
+		}
+	}
+	return cmd.Process.Kill()
+}
+
 func setDefaults() {
 	gOpts.cmds["open"] = &execExpr{"&", `$OPENER "$f"`}
 	gOpts.keys["e"] = &execExpr{"$", `$EDITOR "$f"`}
@@ -117,6 +150,10 @@ func setDefaults() {
 
 	gOpts.cmds["doc"] = &execExpr{"$", "lf -doc | $PAGER"}
 	gOpts.keys["<f-1>"] = &callExpr{"doc", nil, 1}
+}
+
+func setUserUmask() {
+	unix.Umask(0077)
 }
 
 func isExecutable(f os.FileInfo) bool {
@@ -137,7 +174,7 @@ func isHidden(f os.FileInfo, path string, hiddenfiles []string) bool {
 }
 
 func userName(f os.FileInfo) string {
-	if stat, ok := f.Sys().(*syscall.Stat_t); ok {
+	if stat, ok := f.Sys().(*unix.Stat_t); ok {
 		if u, err := user.LookupId(fmt.Sprint(stat.Uid)); err == nil {
 			return fmt.Sprintf("%v ", u.Username)
 		}
@@ -146,7 +183,7 @@ func userName(f os.FileInfo) string {
 }
 
 func groupName(f os.FileInfo) string {
-	if stat, ok := f.Sys().(*syscall.Stat_t); ok {
+	if stat, ok := f.Sys().(*unix.Stat_t); ok {
 		if g, err := user.LookupGroupId(fmt.Sprint(stat.Gid)); err == nil {
 			return fmt.Sprintf("%v ", g.Name)
 		}
@@ -155,29 +192,14 @@ func groupName(f os.FileInfo) string {
 }
 
 func linkCount(f os.FileInfo) string {
-	if stat, ok := f.Sys().(*syscall.Stat_t); ok {
+	if stat, ok := f.Sys().(*unix.Stat_t); ok {
 		return fmt.Sprintf("%v ", stat.Nlink)
 	}
 	return ""
 }
 
-func matchPattern(pattern, name, path string) bool {
-	s := name
-
-	pattern = replaceTilde(pattern)
-
-	if filepath.IsAbs(pattern) {
-		s = filepath.Join(path, name)
-	}
-
-	// pattern errors are checked when 'hiddenfiles' option is set
-	matched, _ := filepath.Match(pattern, s)
-
-	return matched
-}
-
 func errCrossDevice(err error) bool {
-	return err.(*os.LinkError).Err.(syscall.Errno) == syscall.EXDEV
+	return err.(*os.LinkError).Err.(unix.Errno) == unix.EXDEV
 }
 
 func exportFiles(f string, fs []string, pwd string) {

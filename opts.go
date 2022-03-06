@@ -62,6 +62,8 @@ var gOpts struct {
 	shell          string
 	shellflag      string
 	timefmt        string
+	infotimefmtnew string
+	infotimefmtold string
 	truncatechar   string
 	ratios         []int
 	hiddenfiles    []string
@@ -71,6 +73,7 @@ var gOpts struct {
 	cmdkeys        map[string]expr
 	cmds           map[string]expr
 	sortType       sortType
+	tempmarks      string
 }
 
 func init() {
@@ -108,12 +111,15 @@ func init() {
 	gOpts.shell = gDefaultShell
 	gOpts.shellflag = gDefaultShellFlag
 	gOpts.timefmt = time.ANSIC
+	gOpts.infotimefmtnew = "Jan _2 15:04"
+	gOpts.infotimefmtold = "Jan _2  2006"
 	gOpts.truncatechar = "~"
 	gOpts.ratios = []int{1, 2, 3}
 	gOpts.hiddenfiles = []string{".*"}
 	gOpts.info = nil
 	gOpts.shellopts = nil
 	gOpts.sortType = sortType{naturalSort, dirfirstSort}
+	gOpts.tempmarks = "'"
 
 	gOpts.keys = make(map[string]expr)
 
@@ -122,11 +128,13 @@ func init() {
 	gOpts.keys["<c-u>"] = &callExpr{"half-up", nil, 1}
 	gOpts.keys["<c-b>"] = &callExpr{"page-up", nil, 1}
 	gOpts.keys["<pgup>"] = &callExpr{"page-up", nil, 1}
+	gOpts.keys["<c-y>"] = &callExpr{"scrollup", nil, 1}
 	gOpts.keys["j"] = &callExpr{"down", nil, 1}
 	gOpts.keys["<down>"] = &callExpr{"down", nil, 1}
 	gOpts.keys["<c-d>"] = &callExpr{"half-down", nil, 1}
 	gOpts.keys["<c-f>"] = &callExpr{"page-down", nil, 1}
 	gOpts.keys["<pgdn>"] = &callExpr{"page-down", nil, 1}
+	gOpts.keys["<c-e>"] = &callExpr{"scrolldown", nil, 1}
 	gOpts.keys["h"] = &callExpr{"updir", nil, 1}
 	gOpts.keys["<left>"] = &callExpr{"updir", nil, 1}
 	gOpts.keys["l"] = &callExpr{"open", nil, 1}
@@ -136,6 +144,8 @@ func init() {
 	gOpts.keys["<home>"] = &callExpr{"top", nil, 1}
 	gOpts.keys["G"] = &callExpr{"bottom", nil, 1}
 	gOpts.keys["<end>"] = &callExpr{"bottom", nil, 1}
+	gOpts.keys["["] = &callExpr{"jump-prev", nil, 1}
+	gOpts.keys["]"] = &callExpr{"jump-next", nil, 1}
 	gOpts.keys["<space>"] = &listExpr{[]expr{&callExpr{"toggle", nil, 1}, &callExpr{"down", nil, 1}}, 1}
 	gOpts.keys["v"] = &callExpr{"invert", nil, 1}
 	gOpts.keys["u"] = &callExpr{"unselect", nil, 1}

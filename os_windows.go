@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
+	"golang.org/x/sys/windows"
 	"log"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 var (
@@ -30,6 +30,8 @@ var (
 var (
 	gUser        *user.User
 	gConfigPaths []string
+	gColorsPaths []string
+	gIconsPaths  []string
 	gFilesPath   string
 	gMarksPath   string
 	gHistoryPath string
@@ -68,6 +70,16 @@ func init() {
 		filepath.Join(data, "lf", "lfrc"),
 	}
 
+	gColorsPaths = []string{
+		filepath.Join(os.Getenv("ProgramData"), "lf", "colors"),
+		filepath.Join(data, "lf", "colors"),
+	}
+
+	gIconsPaths = []string{
+		filepath.Join(os.Getenv("ProgramData"), "lf", "icons"),
+		filepath.Join(data, "lf", "icons"),
+	}
+
 	gFilesPath = filepath.Join(data, "lf", "files")
 	gMarksPath = filepath.Join(data, "lf", "marks")
 	gHistoryPath = filepath.Join(data, "lf", "history")
@@ -75,7 +87,7 @@ func init() {
 
 func detachedCommand(name string, arg ...string) *exec.Cmd {
 	cmd := exec.Command(name, arg...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 8}
+	cmd.SysProcAttr = &windows.SysProcAttr{CreationFlags: 8}
 	return cmd
 }
 
@@ -87,6 +99,13 @@ func shellCommand(s string, args []string) *exec.Cmd {
 	return exec.Command(gOpts.shell, args...)
 }
 
+func shellSetPG(cmd *exec.Cmd) {
+}
+
+func shellKill(cmd *exec.Cmd) error {
+	return cmd.Process.Kill()
+}
+
 func setDefaults() {
 	gOpts.cmds["open"] = &execExpr{"&", "%OPENER% %f%"}
 	gOpts.keys["e"] = &execExpr{"$", "%EDITOR% %f%"}
@@ -96,6 +115,8 @@ func setDefaults() {
 	gOpts.cmds["doc"] = &execExpr{"!", "lf -doc | %PAGER%"}
 	gOpts.keys["<f-1>"] = &callExpr{"doc", nil, 1}
 }
+
+func setUserUmask() {}
 
 func isExecutable(f os.FileInfo) bool {
 	exts := strings.Split(envPathExt, string(filepath.ListSeparator))
@@ -109,15 +130,15 @@ func isExecutable(f os.FileInfo) bool {
 }
 
 func isHidden(f os.FileInfo, path string, hiddenfiles []string) bool {
-	ptr, err := syscall.UTF16PtrFromString(filepath.Join(path, f.Name()))
+	ptr, err := windows.UTF16PtrFromString(filepath.Join(path, f.Name()))
 	if err != nil {
 		return false
 	}
-	attrs, err := syscall.GetFileAttributes(ptr)
+	attrs, err := windows.GetFileAttributes(ptr)
 	if err != nil {
 		return false
 	}
-	return attrs&syscall.FILE_ATTRIBUTE_HIDDEN != 0
+	return attrs&windows.FILE_ATTRIBUTE_HIDDEN != 0
 }
 
 func userName(f os.FileInfo) string {
@@ -133,7 +154,7 @@ func linkCount(f os.FileInfo) string {
 }
 
 func errCrossDevice(err error) bool {
-	return err.(*os.LinkError).Err.(syscall.Errno) == 17
+	return err.(*os.LinkError).Err.(windows.Errno) == 17
 }
 
 func exportFiles(f string, fs []string, pwd string) {
@@ -145,9 +166,11 @@ func exportFiles(f string, fs []string, pwd string) {
 	}
 	envFiles := strings.Join(quotedFiles, gOpts.filesep)
 
+	envPWD := fmt.Sprintf(`"%s"`, pwd)
+
 	os.Setenv("f", envFile)
 	os.Setenv("fs", envFiles)
-	os.Setenv("PWD", pwd)
+	os.Setenv("PWD", envPWD)
 
 	if len(fs) == 0 {
 		os.Setenv("fx", envFile)

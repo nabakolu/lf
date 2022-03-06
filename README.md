@@ -2,7 +2,7 @@
 
 [Google Groups](https://groups.google.com/forum/#!forum/lf-fm)
 | [Wiki](https://github.com/gokcehan/lf/wiki)
-| [#lf](https://webchat.freenode.net/?channels=lf) (on Freenode)
+| [#lf](https://web.libera.chat/#lf) (on Libera.Chat)
 | [#lf:matrix.org](https://matrix.to/#/#lf:matrix.org) (with IRC bridge)
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/gokcehan/lf)](https://goreportcard.com/report/github.com/gokcehan/lf)
@@ -41,19 +41,39 @@ See [releases](https://github.com/gokcehan/lf/releases) for pre-built binaries.
 
 If you like to build from the source on unix:
 
-    env CGO_ENABLED=0 GO111MODULE=on go get -u -ldflags="-s -w" github.com/gokcehan/lf
+```bash
+# For go version < 1.17
+env CGO_ENABLED=0 GO111MODULE=on go get -u -ldflags="-s -w" github.com/gokcehan/lf
+
+# For go version >= 1.17
+env CGO_ENABLED=0 go install -ldflags="-s -w" github.com/gokcehan/lf@latest
+```
 
 On windows `cmd`:
 
-    set CGO_ENABLED=0
-    set GO111MODULE=on
-    go get -u -ldflags="-s -w" github.com/gokcehan/lf
+```cmd
+REM For go version < 1.17
+set CGO_ENABLED=0
+set GO111MODULE=on
+go get -u -ldflags="-s -w" github.com/gokcehan/lf
+
+REM For go version >= 1.17
+set CGO_ENABLED=0
+go install -ldflags="-s -w" github.com/gokcehan/lf@latest
+```
 
 On windows `powershell`:
 
-    $env:CGO_ENABLED = '0'
-    $env:GO111MODULE = 'on'
-    go get -u -ldflags="-s -w" github.com/gokcehan/lf
+```powershell
+# For go version < 1.17
+$env:CGO_ENABLED = '0'
+$env:GO111MODULE = 'on'
+go get -u -ldflags="-s -w" github.com/gokcehan/lf
+
+# For go version >= 1.17
+$env:CGO_ENABLED = '0'
+go install -ldflags="-s -w" github.com/gokcehan/lf@latest
+```
 
 ## Usage
 
