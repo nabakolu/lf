@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"golang.org/x/sys/unix"
 	"log"
 	"os"
 	"os/exec"
@@ -12,6 +11,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -35,6 +37,7 @@ var (
 	gIconsPaths  []string
 	gFilesPath   string
 	gMarksPath   string
+	gTagsPath    string
 	gHistoryPath string
 )
 
@@ -98,6 +101,7 @@ func init() {
 
 	gFilesPath = filepath.Join(data, "lf", "files")
 	gMarksPath = filepath.Join(data, "lf", "marks")
+	gTagsPath = filepath.Join(data, "lf", "tags")
 	gHistoryPath = filepath.Join(data, "lf", "history")
 
 	runtime := os.Getenv("XDG_RUNTIME_DIR")
@@ -174,7 +178,7 @@ func isHidden(f os.FileInfo, path string, hiddenfiles []string) bool {
 }
 
 func userName(f os.FileInfo) string {
-	if stat, ok := f.Sys().(*unix.Stat_t); ok {
+	if stat, ok := f.Sys().(*syscall.Stat_t); ok {
 		if u, err := user.LookupId(fmt.Sprint(stat.Uid)); err == nil {
 			return fmt.Sprintf("%v ", u.Username)
 		}
@@ -183,7 +187,7 @@ func userName(f os.FileInfo) string {
 }
 
 func groupName(f os.FileInfo) string {
-	if stat, ok := f.Sys().(*unix.Stat_t); ok {
+	if stat, ok := f.Sys().(*syscall.Stat_t); ok {
 		if g, err := user.LookupGroupId(fmt.Sprint(stat.Gid)); err == nil {
 			return fmt.Sprintf("%v ", g.Name)
 		}
@@ -192,7 +196,7 @@ func groupName(f os.FileInfo) string {
 }
 
 func linkCount(f os.FileInfo) string {
-	if stat, ok := f.Sys().(*unix.Stat_t); ok {
+	if stat, ok := f.Sys().(*syscall.Stat_t); ok {
 		return fmt.Sprintf("%v ", stat.Nlink)
 	}
 	return ""

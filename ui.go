@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -287,8 +286,6 @@ func infotimefmt(t time.Time) string {
 func fileInfo(f *file, d *dir) string {
 	var info string
 
-	path := filepath.Join(d.path, f.Name())
-
 	for _, s := range gOpts.info {
 		switch s {
 		case "size":
@@ -303,23 +300,9 @@ func fileInfo(f *file, d *dir) string {
 				continue
 			}
 
-			if f.dirCount == -1 {
-				d, err := os.Open(path)
-				if err != nil {
-					f.dirCount = -2
-				}
-
-				names, err := d.Readdirnames(1000)
-				d.Close()
-
-				if names == nil && err != io.EOF {
-					f.dirCount = -2
-				} else {
-					f.dirCount = len(names)
-				}
-			}
-
 			switch {
+			case f.dirCount < -1:
+				info = fmt.Sprintf("%s    !", info)
 			case f.dirCount < 0:
 				info = fmt.Sprintf("%s    ?", info)
 			case f.dirCount < 1000:
@@ -341,7 +324,7 @@ func fileInfo(f *file, d *dir) string {
 	return info
 }
 
-func (win *win) printDir(screen tcell.Screen, dir *dir, selections map[string]int, saves map[string]bool, colors styleMap, icons iconMap) {
+func (win *win) printDir(screen tcell.Screen, dir *dir, selections map[string]int, saves map[string]bool, tags map[string]string, colors styleMap, icons iconMap) {
 	if win.w < 5 || dir == nil {
 		return
 	}
@@ -466,6 +449,15 @@ func (win *win) printDir(screen tcell.Screen, dir *dir, selections map[string]in
 		s = append(s, ' ')
 
 		win.print(screen, lnwidth+1, i, st, string(s))
+
+		tag, ok := tags[path]
+		if ok {
+			if i == dir.pos {
+				win.print(screen, lnwidth+1, i, st.Reverse(true), tag)
+			} else {
+				win.print(screen, lnwidth+1, i, tcell.StyleDefault, fmt.Sprintf(gOpts.tagfmt, tag))
+			}
+		}
 	}
 }
 
@@ -641,6 +633,10 @@ type reg struct {
 }
 
 func (ui *ui) loadFile(nav *nav, volatile bool) {
+	if !nav.init {
+		return
+	}
+
 	curr, err := nav.currFile()
 	if err != nil {
 		return
@@ -662,6 +658,10 @@ func (ui *ui) loadFile(nav *nav, volatile bool) {
 }
 
 func (ui *ui) loadFileInfo(nav *nav) {
+	if !nav.init {
+		return
+	}
+
 	curr, err := nav.currFile()
 	if err != nil {
 		return
@@ -848,7 +848,7 @@ func (ui *ui) draw(nav *nav) {
 
 	doff := len(nav.dirs) - length
 	for i := 0; i < length; i++ {
-		ui.wins[woff+i].printDir(ui.screen, nav.dirs[doff+i], nav.selections, nav.saves, ui.styles, ui.icons)
+		ui.wins[woff+i].printDir(ui.screen, nav.dirs[doff+i], nav.selections, nav.saves, nav.tags, ui.styles, ui.icons)
 	}
 
 	switch ui.cmdPrefix {
@@ -882,7 +882,7 @@ func (ui *ui) draw(nav *nav) {
 			preview := ui.wins[len(ui.wins)-1]
 
 			if curr.IsDir() {
-				preview.printDir(ui.screen, ui.dirPrev, nav.selections, nav.saves, ui.styles, ui.icons)
+				preview.printDir(ui.screen, ui.dirPrev, nav.selections, nav.saves, nav.tags, ui.styles, ui.icons)
 			} else if curr.Mode().IsRegular() {
 				preview.printReg(ui.screen, ui.regPrev)
 			}

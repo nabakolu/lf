@@ -17,11 +17,11 @@ var (
 		"up",
 		"half-up",
 		"page-up",
-		"scrollup",
+		"scroll-up",
 		"down",
 		"half-down",
 		"page-down",
-		"scrolldown",
+		"scroll-down",
 		"updir",
 		"open",
 		"quit",
@@ -69,6 +69,8 @@ var (
 		"source",
 		"push",
 		"delete",
+		"tag",
+		"tag-toggle",
 	}
 
 	gOptWords = []string{
@@ -161,6 +163,7 @@ var (
 		"sortby",
 		"timefmt",
 		"tempmarks",
+		"tagfmt",
 		"infotimefmtnew",
 		"infotimefmtold",
 		"truncatechar",

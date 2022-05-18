@@ -67,7 +67,7 @@ func exportEnvVars() {
 
 	dir, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
+		fmt.Fprintf(os.Stderr, "getting current directory: %s\n", err)
 	}
 	os.Setenv("OLDPWD", dir)
 
@@ -188,9 +188,9 @@ func main() {
 		f := flag.CommandLine.Output()
 		fmt.Fprintln(f, "lf - Terminal file manager")
 		fmt.Fprintln(f, "")
-		fmt.Fprintf(f, "Usage:  %s [options] [select-path]\n\n", os.Args[0])
-		fmt.Fprintln(f, "  select-path")
-		fmt.Fprintln(f, "        set the initial file selection to the given argument")
+		fmt.Fprintf(f, "Usage:  %s [options] [cd-or-select-path]\n\n", os.Args[0])
+		fmt.Fprintln(f, "  cd-or-select-path")
+		fmt.Fprintln(f, "        set the initial dir or file selection to the given argument")
 		fmt.Fprintln(f, "")
 		fmt.Fprintln(f, "Options:")
 		flag.PrintDefaults()
@@ -304,7 +304,7 @@ func main() {
 		case 0:
 			_, err := os.Getwd()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "%s\n", err)
+				fmt.Fprintf(os.Stderr, "getting current directory: %s\n", err)
 				os.Exit(2)
 			}
 		case 1:

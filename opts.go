@@ -74,6 +74,7 @@ var gOpts struct {
 	cmds           map[string]expr
 	sortType       sortType
 	tempmarks      string
+	tagfmt         string
 }
 
 func init() {
@@ -120,6 +121,7 @@ func init() {
 	gOpts.shellopts = nil
 	gOpts.sortType = sortType{naturalSort, dirfirstSort}
 	gOpts.tempmarks = "'"
+	gOpts.tagfmt = "\033[31m%s\033[0m"
 
 	gOpts.keys = make(map[string]expr)
 
@@ -128,13 +130,13 @@ func init() {
 	gOpts.keys["<c-u>"] = &callExpr{"half-up", nil, 1}
 	gOpts.keys["<c-b>"] = &callExpr{"page-up", nil, 1}
 	gOpts.keys["<pgup>"] = &callExpr{"page-up", nil, 1}
-	gOpts.keys["<c-y>"] = &callExpr{"scrollup", nil, 1}
+	gOpts.keys["<c-y>"] = &callExpr{"scroll-up", nil, 1}
 	gOpts.keys["j"] = &callExpr{"down", nil, 1}
 	gOpts.keys["<down>"] = &callExpr{"down", nil, 1}
 	gOpts.keys["<c-d>"] = &callExpr{"half-down", nil, 1}
 	gOpts.keys["<c-f>"] = &callExpr{"page-down", nil, 1}
 	gOpts.keys["<pgdn>"] = &callExpr{"page-down", nil, 1}
-	gOpts.keys["<c-e>"] = &callExpr{"scrolldown", nil, 1}
+	gOpts.keys["<c-e>"] = &callExpr{"scroll-down", nil, 1}
 	gOpts.keys["h"] = &callExpr{"updir", nil, 1}
 	gOpts.keys["<left>"] = &callExpr{"updir", nil, 1}
 	gOpts.keys["l"] = &callExpr{"open", nil, 1}
@@ -144,9 +146,13 @@ func init() {
 	gOpts.keys["<home>"] = &callExpr{"top", nil, 1}
 	gOpts.keys["G"] = &callExpr{"bottom", nil, 1}
 	gOpts.keys["<end>"] = &callExpr{"bottom", nil, 1}
+	gOpts.keys["H"] = &callExpr{"high", nil, 1}
+	gOpts.keys["M"] = &callExpr{"middle", nil, 1}
+	gOpts.keys["L"] = &callExpr{"low", nil, 1}
 	gOpts.keys["["] = &callExpr{"jump-prev", nil, 1}
 	gOpts.keys["]"] = &callExpr{"jump-next", nil, 1}
 	gOpts.keys["<space>"] = &listExpr{[]expr{&callExpr{"toggle", nil, 1}, &callExpr{"down", nil, 1}}, 1}
+	gOpts.keys["t"] = &callExpr{"tag-toggle", nil, 1}
 	gOpts.keys["v"] = &callExpr{"invert", nil, 1}
 	gOpts.keys["u"] = &callExpr{"unselect", nil, 1}
 	gOpts.keys["y"] = &callExpr{"copy", nil, 1}

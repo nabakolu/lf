@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
 
 func (e *setExpr) eval(app *app, args []string) {
-	// from app only app.ui.echo*() may be used inside this function
 	switch e.opt {
 	case "anchorfind":
 		gOpts.anchorfind = true
@@ -40,70 +40,91 @@ func (e *setExpr) eval(app *app, args []string) {
 		gOpts.dircounts = !gOpts.dircounts
 	case "dironly":
 		gOpts.dironly = true
-		gInvalidate.sort = true
-		gInvalidate.pos = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.nav.position()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "nodironly":
 		gOpts.dironly = false
-		gInvalidate.sort = true
-		gInvalidate.pos = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.nav.position()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "dironly!":
 		gOpts.dironly = !gOpts.dironly
-		gInvalidate.sort = true
-		gInvalidate.pos = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.nav.position()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "dirfirst":
 		gOpts.sortType.option |= dirfirstSort
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
 	case "nodirfirst":
 		gOpts.sortType.option &= ^dirfirstSort
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
 	case "dirfirst!":
 		gOpts.sortType.option ^= dirfirstSort
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
 	case "drawbox":
 		gOpts.drawbox = true
-		gInvalidate.navSize = true
-		gInvalidate.dir = true
+		app.ui.renew()
+		if app.nav.height != app.ui.wins[0].h {
+			app.nav.height = app.ui.wins[0].h
+			app.nav.regCache = make(map[string]*reg)
+		}
+		app.ui.loadFile(app.nav, true)
 	case "nodrawbox":
 		gOpts.drawbox = false
-		gInvalidate.navSize = true
-		gInvalidate.dir = true
+		app.ui.renew()
+		if app.nav.height != app.ui.wins[0].h {
+			app.nav.height = app.ui.wins[0].h
+			app.nav.regCache = make(map[string]*reg)
+		}
+		app.ui.loadFile(app.nav, true)
 	case "drawbox!":
 		gOpts.drawbox = !gOpts.drawbox
-		gInvalidate.navSize = true
-		gInvalidate.dir = true
+		app.ui.renew()
+		if app.nav.height != app.ui.wins[0].h {
+			app.nav.height = app.ui.wins[0].h
+			app.nav.regCache = make(map[string]*reg)
+		}
+		app.ui.loadFile(app.nav, true)
 	case "globsearch":
 		gOpts.globsearch = true
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "noglobsearch":
 		gOpts.globsearch = false
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "globsearch!":
 		gOpts.globsearch = !gOpts.globsearch
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "hidden":
 		gOpts.sortType.option |= hiddenSort
-		gInvalidate.sort = true
-		gInvalidate.pos = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.nav.position()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "nohidden":
 		gOpts.sortType.option &= ^hiddenSort
-		gInvalidate.sort = true
-		gInvalidate.pos = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.nav.position()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "hidden!":
 		gOpts.sortType.option ^= hiddenSort
-		gInvalidate.sort = true
-		gInvalidate.pos = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.nav.position()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "icons":
 		gOpts.icons = true
 	case "noicons":
@@ -112,28 +133,31 @@ func (e *setExpr) eval(app *app, args []string) {
 		gOpts.icons = !gOpts.icons
 	case "ignorecase":
 		gOpts.ignorecase = true
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "noignorecase":
 		gOpts.ignorecase = false
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "ignorecase!":
 		gOpts.ignorecase = !gOpts.ignorecase
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "ignoredia":
 		gOpts.ignoredia = true
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
 	case "noignoredia":
 		gOpts.ignoredia = false
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
 	case "ignoredia!":
 		gOpts.ignoredia = !gOpts.ignoredia
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
 	case "incfilter":
 		gOpts.incfilter = true
 	case "noincfilter":
@@ -149,20 +173,21 @@ func (e *setExpr) eval(app *app, args []string) {
 	case "mouse":
 		if !gOpts.mouse {
 			gOpts.mouse = true
-			gInvalidate.mouse = true
+			app.ui.screen.EnableMouse()
 		}
 	case "nomouse":
 		if gOpts.mouse {
 			gOpts.mouse = false
-			gInvalidate.mouse = true
+			app.ui.screen.DisableMouse()
 		}
 	case "mouse!":
 		if gOpts.mouse {
 			gOpts.mouse = false
+			app.ui.screen.DisableMouse()
 		} else {
 			gOpts.mouse = true
+			app.ui.screen.EnableMouse()
 		}
-		gInvalidate.mouse = true
 	case "number":
 		gOpts.number = true
 	case "nonumber":
@@ -191,28 +216,31 @@ func (e *setExpr) eval(app *app, args []string) {
 		gOpts.relativenumber = !gOpts.relativenumber
 	case "reverse":
 		gOpts.sortType.option |= reverseSort
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
 	case "noreverse":
 		gOpts.sortType.option &= ^reverseSort
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
 	case "reverse!":
 		gOpts.sortType.option ^= reverseSort
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
 	case "smartcase":
 		gOpts.smartcase = true
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "nosmartcase":
 		gOpts.smartcase = false
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "smartcase!":
 		gOpts.smartcase = !gOpts.smartcase
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "smartdia":
 		gOpts.smartdia = true
 	case "nosmartdia":
@@ -255,7 +283,12 @@ func (e *setExpr) eval(app *app, args []string) {
 			return
 		}
 		gOpts.period = n
-		gInvalidate.period = true
+		if n == 0 {
+			app.ticker.Stop()
+		} else {
+			app.ticker.Stop()
+			app.ticker = time.NewTicker(time.Duration(gOpts.period) * time.Second)
+		}
 	case "scrolloff":
 		n, err := strconv.Atoi(e.val)
 		if err != nil {
@@ -296,9 +329,10 @@ func (e *setExpr) eval(app *app, args []string) {
 			}
 		}
 		gOpts.hiddenfiles = toks
-		gInvalidate.sort = true
-		gInvalidate.pos = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.nav.position()
+		app.ui.sort()
+		app.ui.loadFile(app.nav, true)
 	case "ifs":
 		gOpts.ifs = e.val
 	case "info":
@@ -343,7 +377,7 @@ func (e *setExpr) eval(app *app, args []string) {
 		}
 		gOpts.ratios = rats
 		app.ui.wins = getWins(app.ui.screen)
-		gInvalidate.dir = true
+		app.ui.loadFile(app.nav, true)
 	case "shell":
 		gOpts.shell = e.val
 	case "shellflag":
@@ -374,14 +408,16 @@ func (e *setExpr) eval(app *app, args []string) {
 			app.ui.echoerr("sortby: value should either be 'natural', 'name', 'size', 'time', 'atime', 'ctime' or 'ext'")
 			return
 		}
-		gInvalidate.sort = true
-		gInvalidate.dir = true
+		app.nav.sort()
+		app.ui.sort()
 	case "tempmarks":
 		if e.val != "" {
 			gOpts.tempmarks = "'" + e.val
 		} else {
 			gOpts.tempmarks = "'"
 		}
+	case "tagfmt":
+		gOpts.tagfmt = e.val
 	case "timefmt":
 		gOpts.timefmt = e.val
 	case "infotimefmtnew":
@@ -399,6 +435,7 @@ func (e *setExpr) eval(app *app, args []string) {
 		app.ui.echoerrf("unknown option: %s", e.opt)
 		return
 	}
+	app.ui.loadFileInfo(app.nav)
 }
 
 func (e *mapExpr) eval(app *app, args []string) {
@@ -407,6 +444,7 @@ func (e *mapExpr) eval(app *app, args []string) {
 	} else {
 		gOpts.keys[e.keys] = e.expr
 	}
+	app.ui.loadFileInfo(app.nav)
 }
 
 func (e *cmapExpr) eval(app *app, args []string) {
@@ -415,6 +453,7 @@ func (e *cmapExpr) eval(app *app, args []string) {
 	} else {
 		gOpts.cmdkeys[e.key] = e.expr
 	}
+	app.ui.loadFileInfo(app.nav)
 }
 
 func (e *cmdExpr) eval(app *app, args []string) {
@@ -423,6 +462,7 @@ func (e *cmdExpr) eval(app *app, args []string) {
 	} else {
 		gOpts.cmds[e.name] = e.expr
 	}
+	app.ui.loadFileInfo(app.nav)
 }
 
 func preChdir(app *app) {
@@ -755,46 +795,73 @@ func insert(app *app, arg string) {
 func (e *callExpr) eval(app *app, args []string) {
 	switch e.name {
 	case "up":
+		if !app.nav.init {
+			return
+		}
 		if app.nav.up(e.count) {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
 	case "half-up":
+		if !app.nav.init {
+			return
+		}
 		if app.nav.up(e.count * app.nav.height / 2) {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
 	case "page-up":
+		if !app.nav.init {
+			return
+		}
 		if app.nav.up(e.count * app.nav.height) {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
-	case "scrollup":
-		if app.nav.scrollup(e.count) {
+	case "scroll-up":
+		if !app.nav.init {
+			return
+		}
+		if app.nav.scrollUp(e.count) {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
 	case "down":
+		if !app.nav.init {
+			return
+		}
 		if app.nav.down(e.count) {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
 	case "half-down":
+		if !app.nav.init {
+			return
+		}
 		if app.nav.down(e.count * app.nav.height / 2) {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
 	case "page-down":
+		if !app.nav.init {
+			return
+		}
 		if app.nav.down(e.count * app.nav.height) {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
-	case "scrolldown":
-		if app.nav.scrolldown(e.count) {
+	case "scroll-down":
+		if !app.nav.init {
+			return
+		}
+		if app.nav.scrollDown(e.count) {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
 	case "updir":
+		if !app.nav.init {
+			return
+		}
 		resetIncCmd(app)
 		preChdir(app)
 		for i := 0; i < e.count; i++ {
@@ -808,6 +875,9 @@ func (e *callExpr) eval(app *app, args []string) {
 		restartIncCmd(app)
 		onChdir(app)
 	case "open":
+		if !app.nav.init {
+			return
+		}
 		curr, err := app.nav.currFile()
 		if err != nil {
 			app.ui.echoerrf("opening: %s", err)
@@ -880,16 +950,49 @@ func (e *callExpr) eval(app *app, args []string) {
 	case "quit":
 		app.quitChan <- struct{}{}
 	case "top":
+		if !app.nav.init {
+			return
+		}
 		if app.nav.top() {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
 	case "bottom":
+		if !app.nav.init {
+			return
+		}
 		if app.nav.bottom() {
 			app.ui.loadFile(app.nav, true)
 			app.ui.loadFileInfo(app.nav)
 		}
+	case "high":
+		if !app.nav.init {
+			return
+		}
+		if app.nav.high() {
+			app.ui.loadFile(app.nav, true)
+			app.ui.loadFileInfo(app.nav)
+		}
+	case "middle":
+		if !app.nav.init {
+			return
+		}
+		if app.nav.middle() {
+			app.ui.loadFile(app.nav, true)
+			app.ui.loadFileInfo(app.nav)
+		}
+	case "low":
+		if !app.nav.init {
+			return
+		}
+		if app.nav.low() {
+			app.ui.loadFile(app.nav, true)
+			app.ui.loadFileInfo(app.nav)
+		}
 	case "toggle":
+		if !app.nav.init {
+			return
+		}
 		if len(e.args) == 0 {
 			app.nav.toggle()
 		} else {
@@ -906,12 +1009,68 @@ func (e *callExpr) eval(app *app, args []string) {
 				}
 			}
 		}
+	case "tag-toggle":
+		if !app.nav.init {
+			return
+		}
+
+		tag := "*"
+		if len(e.args) != 0 {
+			tag = e.args[0]
+		}
+
+		if err := app.nav.tagToggle(tag); err != nil {
+			app.ui.echoerrf("tag-toggle: %s", err)
+		} else if err := app.nav.writeTags(); err != nil {
+			app.ui.echoerrf("tag-toggle: %s", err)
+		}
+
+		if gSingleMode {
+			if err := app.nav.sync(); err != nil {
+				app.ui.echoerrf("tag-toggle: %s", err)
+			}
+		} else {
+			if err := remote("send sync"); err != nil {
+				app.ui.echoerrf("tag-toggle: %s", err)
+			}
+		}
+	case "tag":
+		if !app.nav.init {
+			return
+		}
+
+		tag := "*"
+		if len(e.args) != 0 {
+			tag = e.args[0]
+		}
+
+		if err := app.nav.tag(tag); err != nil {
+			app.ui.echoerrf("tag: %s", err)
+		} else if err := app.nav.writeTags(); err != nil {
+			app.ui.echoerrf("tag: %s", err)
+		}
+
+		if gSingleMode {
+			if err := app.nav.sync(); err != nil {
+				app.ui.echoerrf("tag: %s", err)
+			}
+		} else {
+			if err := remote("send sync"); err != nil {
+				app.ui.echoerrf("tag: %s", err)
+			}
+		}
 	case "invert":
+		if !app.nav.init {
+			return
+		}
 		app.nav.invert()
 	case "unselect":
 		app.nav.unselect()
 	case "calcdirsize":
-		err := app.nav.getDirSize()
+		if !app.nav.init {
+			return
+		}
+		err := app.nav.calcDirSize()
 		if err != nil {
 			app.ui.echoerrf("calcdirsize: %s", err)
 			return
@@ -920,6 +1079,10 @@ func (e *callExpr) eval(app *app, args []string) {
 		app.nav.sort()
 		app.ui.sort()
 	case "copy":
+		if !app.nav.init {
+			return
+		}
+
 		if err := app.nav.save(true); err != nil {
 			app.ui.echoerrf("copy: %s", err)
 			return
@@ -938,6 +1101,10 @@ func (e *callExpr) eval(app *app, args []string) {
 		}
 		app.ui.loadFileInfo(app.nav)
 	case "cut":
+		if !app.nav.init {
+			return
+		}
+
 		if err := app.nav.save(false); err != nil {
 			app.ui.echoerrf("cut: %s", err)
 			return
@@ -956,6 +1123,10 @@ func (e *callExpr) eval(app *app, args []string) {
 		}
 		app.ui.loadFileInfo(app.nav)
 	case "paste":
+		if !app.nav.init {
+			return
+		}
+
 		if cmd, ok := gOpts.cmds["paste"]; ok {
 			cmd.eval(app, e.args)
 		} else if err := app.nav.paste(app.ui); err != nil {
@@ -965,6 +1136,10 @@ func (e *callExpr) eval(app *app, args []string) {
 		app.ui.loadFile(app.nav, true)
 		app.ui.loadFileInfo(app.nav)
 	case "delete":
+		if !app.nav.init {
+			return
+		}
+
 		if cmd, ok := gOpts.cmds["delete"]; ok {
 			cmd.eval(app, e.args)
 			app.nav.unselect()
@@ -997,6 +1172,9 @@ func (e *callExpr) eval(app *app, args []string) {
 		app.ui.loadFile(app.nav, true)
 		app.ui.loadFileInfo(app.nav)
 	case "clear":
+		if !app.nav.init {
+			return
+		}
 		if err := saveFiles(nil, false); err != nil {
 			app.ui.echoerrf("clear: %s", err)
 			return
@@ -1015,6 +1193,9 @@ func (e *callExpr) eval(app *app, args []string) {
 		app.ui.loadFileInfo(app.nav)
 	case "draw":
 	case "redraw":
+		if !app.nav.init {
+			return
+		}
 		app.ui.renew()
 		app.ui.screen.Sync()
 		if app.nav.height != app.ui.wins[0].h {
@@ -1023,9 +1204,15 @@ func (e *callExpr) eval(app *app, args []string) {
 		}
 		app.ui.loadFile(app.nav, true)
 	case "load":
+		if !app.nav.init {
+			return
+		}
 		app.nav.renew()
 		app.ui.loadFile(app.nav, true)
 	case "reload":
+		if !app.nav.init {
+			return
+		}
 		if err := app.nav.reload(); err != nil {
 			app.ui.echoerrf("reload: %s", err)
 		}
@@ -1083,6 +1270,9 @@ func (e *callExpr) eval(app *app, args []string) {
 		app.nav.findBack = true
 		app.ui.loadFileInfo(app.nav)
 	case "find-next":
+		if !app.nav.init {
+			return
+		}
 		dir := app.nav.currDir()
 		old := dir.ind
 		for i := 0; i < e.count; i++ {
@@ -1097,6 +1287,9 @@ func (e *callExpr) eval(app *app, args []string) {
 			app.ui.loadFileInfo(app.nav)
 		}
 	case "find-prev":
+		if !app.nav.init {
+			return
+		}
 		dir := app.nav.currDir()
 		old := dir.ind
 		for i := 0; i < e.count; i++ {
@@ -1111,6 +1304,9 @@ func (e *callExpr) eval(app *app, args []string) {
 			app.ui.loadFileInfo(app.nav)
 		}
 	case "search":
+		if !app.nav.init {
+			return
+		}
 		if app.ui.cmdPrefix == ">" {
 			return
 		}
@@ -1122,6 +1318,9 @@ func (e *callExpr) eval(app *app, args []string) {
 		app.nav.searchBack = false
 		app.ui.loadFileInfo(app.nav)
 	case "search-back":
+		if !app.nav.init {
+			return
+		}
 		if app.ui.cmdPrefix == ">" {
 			return
 		}
@@ -1133,6 +1332,9 @@ func (e *callExpr) eval(app *app, args []string) {
 		app.nav.searchBack = true
 		app.ui.loadFileInfo(app.nav)
 	case "search-next":
+		if !app.nav.init {
+			return
+		}
 		for i := 0; i < e.count; i++ {
 			if app.nav.searchBack {
 				if moved, err := app.nav.searchPrev(); err != nil {
@@ -1151,6 +1353,9 @@ func (e *callExpr) eval(app *app, args []string) {
 			}
 		}
 	case "search-prev":
+		if !app.nav.init {
+			return
+		}
 		for i := 0; i < e.count; i++ {
 			if app.nav.searchBack {
 				if moved, err := app.nav.searchNext(); err != nil {
@@ -1169,6 +1374,9 @@ func (e *callExpr) eval(app *app, args []string) {
 			}
 		}
 	case "filter":
+		if !app.nav.init {
+			return
+		}
 		if app.ui.cmdPrefix == ">" {
 			return
 		}
@@ -1183,6 +1391,9 @@ func (e *callExpr) eval(app *app, args []string) {
 		}
 		app.ui.loadFileInfo(app.nav)
 	case "setfilter":
+		if !app.nav.init {
+			return
+		}
 		log.Printf("filter: %s", e.args)
 		if err := app.nav.setFilter(e.args); err != nil {
 			app.ui.echoerrf("filter: %s", err)
@@ -1210,6 +1421,9 @@ func (e *callExpr) eval(app *app, args []string) {
 		app.ui.menuBuf = listMarks(app.nav.marks)
 		app.ui.cmdPrefix = "mark-remove: "
 	case "rename":
+		if !app.nav.init {
+			return
+		}
 		if cmd, ok := gOpts.cmds["rename"]; ok {
 			cmd.eval(app, e.args)
 			if gSingleMode {
@@ -1256,7 +1470,6 @@ func (e *callExpr) eval(app *app, args []string) {
 		if err != nil {
 			log.Printf("getting current directory: %s", err)
 		}
-		log.Printf("todo-cd-eval %s", wd)
 
 		path = replaceTilde(path)
 		if !filepath.IsAbs(path) {
@@ -1284,6 +1497,10 @@ func (e *callExpr) eval(app *app, args []string) {
 			onChdir(app)
 		}
 	case "select":
+		if !app.nav.init {
+			return
+		}
+
 		if len(e.args) != 1 {
 			app.ui.echoerr("select: requires an argument")
 			return
@@ -1320,6 +1537,9 @@ func (e *callExpr) eval(app *app, args []string) {
 			onChdir(app)
 		}
 	case "glob-select":
+		if !app.nav.init {
+			return
+		}
 		if len(e.args) != 1 {
 			app.ui.echoerr("glob-select: requires a pattern to match")
 			return
@@ -1329,6 +1549,9 @@ func (e *callExpr) eval(app *app, args []string) {
 			return
 		}
 	case "glob-unselect":
+		if !app.nav.init {
+			return
+		}
 		if len(e.args) != 1 {
 			app.ui.echoerr("glob-unselect: requires a pattern to match")
 			return

@@ -5,12 +5,13 @@ package main
 var genDocString = `
 lf is a terminal file manager.
 
-Source code can be found in the repository at
-https://github.com/gokcehan/lf.
+Source code can be found in the repository at https://github.com/gokcehan/lf
 
 This documentation can either be read from terminal using 'lf -doc' or
-online at https://pkg.go.dev/github.com/gokcehan/lf. You can also use 'doc'
-command (default '<f-1>') inside lf to view the documentation in a pager.
+online at https://pkg.go.dev/github.com/gokcehan/lf You can also use 'doc'
+command (default '<f-1>') inside lf to view the documentation in a pager. A
+man page with the same content is also available in the repository at
+https://github.com/gokcehan/lf/blob/master/lf.1
 
 You can run 'lf -help' to see descriptions of command line options.
 
@@ -23,15 +24,20 @@ The following commands are provided by lf:
     up                       (default 'k' and '<up>')
     half-up                  (default '<c-u>')
     page-up                  (default '<c-b>' and '<pgup>')
-    scrollup                 (default '<c-y>')
+    scroll-up                (default '<c-y>')
     down                     (default 'j' and '<down>')
     half-down                (default '<c-d>')
     page-down                (default '<c-f>' and '<pgdn>')
-    scrolldown               (default '<c-e>')
+    scroll-down              (default '<c-e>')
     updir                    (default 'h' and '<left>')
     open                     (default 'l' and '<right>')
+    jump-next                (default ']')
+    jump-prev                (default '[')
     top                      (default 'gg' and '<home>')
     bottom                   (default 'G' and '<end>')
+    high                     (default 'H')
+    middle                   (default 'M')
+    low                      (default 'L')
     toggle
     invert                   (default 'v')
     unselect                 (default 'u')
@@ -74,6 +80,8 @@ The following commands are provided by lf:
     mark-save      (modal)   (default 'm')
     mark-load      (modal)   (default "'")
     mark-remove    (modal)   (default '"')
+    tag
+    tag-toggle               (default 't')
 
 The following command line commands are provided by lf:
 
@@ -108,6 +116,7 @@ The following options can be used to customize the behavior of lf:
 
     anchorfind     bool      (default on)
     autoquit       bool      (default off)
+    cleaner        string    (default '')
     dircache       bool      (default on)
     dircounts      bool      (default off)
     dirfirst       bool      (default on)
@@ -126,28 +135,28 @@ The following options can be used to customize the behavior of lf:
     incfilter      bool      (default off)
     incsearch      bool      (default off)
     info           []string  (default '')
+    infotimefmtnew string    (default 'Jan _2 15:04')
+    infotimefmtold string    (default 'Jan _2  2006')
     mouse          bool      (default off)
     number         bool      (default off)
     period         int       (default 0)
     preview        bool      (default on)
     previewer      string    (default '')
-    cleaner        string    (default '')
     promptfmt      string    (default "\033[32;1m%u@%h\033[0m:\033[34;1m%d\033[0m\033[1m%f\033[0m")
     ratios         []int     (default '1:2:3')
     relativenumber bool      (default off)
     reverse        bool      (default off)
     scrolloff      int       (default 0)
-    shell          string    (default 'sh' for unix and 'cmd' for windows)
-    shellflag      string    (default '-c' for unix and '/c' for windows)
+    shell          string    (default 'sh' for Unix and 'cmd' for Windows)
+    shellflag      string    (default '-c' for Unix and '/c' for Windows)
     shellopts      []string  (default '')
     smartcase      bool      (default on)
     smartdia       bool      (default off)
     sortby         string    (default 'natural')
     tabstop        int       (default 8)
+    tagfmt         string    (default "\033[31m%s\033[0m")
     tempmarks      string    (default '')
     timefmt        string    (default 'Mon Jan _2 15:04:05 2006')
-    infotimefmtnew string    (default 'Jan _2 15:04')
-    infotimefmtold string    (default 'Jan _2  2006')
     truncatechar   string    (default '~')
     waitmsg        string    (default 'Press any key to continue')
     wrapscan       bool      (default on)
@@ -166,10 +175,22 @@ The following environment variables are exported for shell commands:
     EDITOR
     PAGER
     SHELL
+    lf_{option}
+
+The following special shell commands are used to customize the behavior of
+lf when defined:
+
+    open
+    paste
+    rename
+    delete
+    pre-cd
+    on-cd
+    on-quit
 
 The following commands/keybindings are provided by default:
 
-    unix                     windows
+    Unix                     Windows
     cmd open &$OPENER "$f"   cmd open &%OPENER% %f%
     map e $$EDITOR "$f"      map e $%EDITOR% %f%
     map i $$PAGER "$f"       map i !%PAGER% %f%
@@ -197,34 +218,41 @@ Configuration
 
 Configuration files should be located at:
 
-    os       system-wide             user-specific
-    unix     /etc/lf/lfrc            ~/.config/lf/lfrc
-    windows  C:\ProgramData\lf\lfrc  C:\Users\<user>\AppData\Local\lf\lfrc
+    OS       system-wide               user-specific
+    Unix     /etc/lf/lfrc              ~/.config/lf/lfrc
+    Windows  C:\ProgramData\lf\lfrc    C:\Users\<user>\AppData\Local\lf\lfrc
 
 Colors file should be located at:
 
-    unix     ~/.local/share/lf/colors
-    windows  C:\Users\<user>\AppData\Local\lf\colors
+    OS       system-wide               user-specific
+    Unix     /etc/lf/colors            ~/.config/lf/colors
+    Windows  C:\ProgramData\lf\colors  C:\Users\<user>\AppData\Local\lf\colors
 
 Icons file should be located at:
 
-    unix     ~/.local/share/lf/icons
-    windows  C:\Users\<user>\AppData\Local\lf\icons
+    OS       system-wide               user-specific
+    Unix     /etc/lf/icons             ~/.config/lf/icons
+    Windows  C:\ProgramData\lf\icons   C:\Users\<user>\AppData\Local\lf\icons
 
 Selection file should be located at:
 
-    unix     ~/.local/share/lf/files
-    windows  C:\Users\<user>\AppData\Local\lf\files
+    Unix     ~/.local/share/lf/files
+    Windows  C:\Users\<user>\AppData\Local\lf\files
 
 Marks file should be located at:
 
-    unix     ~/.local/share/lf/marks
-    windows  C:\Users\<user>\AppData\Local\lf\marks
+    Unix     ~/.local/share/lf/marks
+    Windows  C:\Users\<user>\AppData\Local\lf\marks
+
+Tags file should be located at:
+
+    Unix     ~/.local/share/lf/tags
+    Windows  C:\Users\<user>\AppData\Local\lf\tags
 
 History file should be located at:
 
-    unix     ~/.local/share/lf/history
-    windows  C:\Users\<user>\AppData\Local\lf\history
+    Unix     ~/.local/share/lf/history
+    Windows  C:\Users\<user>\AppData\Local\lf\history
 
 You can configure the default values of following variables to change these
 locations:
@@ -235,7 +263,7 @@ locations:
     %LOCALAPPDATA%    C:\Users\<user>\AppData\Local
 
 A sample configuration file can be found at
-https://github.com/gokcehan/lf/blob/master/etc/lfrc.example.
+https://github.com/gokcehan/lf/blob/master/etc/lfrc.example
 
 
 Commands
@@ -251,14 +279,14 @@ Quit lf and return to the shell.
     up                       (default 'k' and '<up>')
     half-up                  (default '<c-u>')
     page-up                  (default '<c-b>' and '<pgup>')
-    scrollup                 (default '<c-y>')
+    scroll-up                (default '<c-y>')
     down                     (default 'j' and '<down>')
     half-down                (default '<c-d>')
     page-down                (default '<c-f>' and '<pgdn>')
-    scrolldown               (default '<c-e>')
+    scroll-down              (default '<c-e>')
 
-Move the current file selection upwards/downwards by one/half a page/full
-page.
+Move/scroll the current file selection upwards/downwards by one/half a
+page/full page.
 
     updir                    (default 'h' and '<left>')
 
@@ -272,20 +300,21 @@ to call the default system opener asynchronously with the current file as
 the argument. A custom 'open' command can be defined to override this
 default.
 
-(See also 'OPENER' variable and 'Opening Files' section)
-
+    jump-next                (default ']')
     jump-prev                (default '[')
 
-Change the current working directory to the previous jumplist item.
-
-    jump-next                (default ']')
-
-Change the current working directory to the next jumplist item.
+Change the current working directory to the next/previous jumplist item.
 
     top                      (default 'gg' and '<home>')
     bottom                   (default 'G' and '<end>')
 
 Move the current file selection to the top/bottom of the directory.
+
+    high                     (default 'H')
+    middle                   (default 'M')
+    low                      (default 'L')
+
+Move the current file selection to the high/middle/low of the screen.
 
     toggle
 
@@ -304,16 +333,16 @@ invert'), though this will also remove selections in other directories.
 Remove the selection of all files in all directories.
 
     glob-select
-
-Select files that match the given glob.
-
     glob-unselect
 
-Unselect files that match the given glob.
+Select/unselect files that match the given glob.
 
     calcdirsize
 
-Get the total size for each of the selected directories.
+Calculate the total size for each of the selected directories. Option 'info'
+should include 'size' and option 'dircounts' should be disabled to show this
+size. If the total size of a directory is not calculated, it will be shown
+as '-'.
 
     copy                     (default 'y')
 
@@ -327,7 +356,8 @@ buffer, otherwise, copy the paths of selected files.
 
     paste                    (default 'p')
 
-Copy/Move files in copy/cut buffer to the current working directory.
+Copy/Move files in copy/cut buffer to the current working directory. A
+custom 'paste' command can be defined to override this default.
 
     clear                    (default 'c')
 
@@ -366,7 +396,7 @@ file.
 
     echoerr
 
-Print given arguments to the message line at the bottom in red color and
+Print given arguments to the message line at the bottom as 'errorfmt' and
 also to the log file.
 
     cd
@@ -379,7 +409,8 @@ Change the current file selection to the given argument.
 
     delete         (modal)
 
-Remove the current file or selected file(s).
+Remove the current file or selected file(s). A custom 'delete' command can
+be defined to override this default.
 
     rename         (modal)   (default 'r')
 
@@ -402,20 +433,14 @@ Read a command to evaluate.
 
 Read a shell command to execute.
 
-(See also 'Prefixes' and 'Shell Commands' sections)
-
     shell-pipe     (modal)   (default '%')
 
 Read a shell command to execute piping its standard I/O to the bottom
 statline.
 
-(See also 'Prefixes' and 'Piping Shell Commands' sections)
-
     shell-wait     (modal)   (default '!')
 
 Read a shell command to execute and wait for a key press in the end.
-
-(See also 'Prefixes' and 'Waiting Shell Commands' sections)
 
     shell-async    (modal)   (default '&')
 
@@ -429,9 +454,6 @@ Read a shell command to execute asynchronously without standard I/O.
 Read key(s) to find the appropriate file name match in the forward/backward
 direction and jump to the next/previous match.
 
-(See also 'anchorfind', 'findlen', 'wrapscan', 'ignorecase', 'smartcase',
-'ignoredia', and 'smartdia' options and 'Searching Files' section)
-
     search                   (default '/')
     search-back              (default '?')
     search-next              (default 'n')
@@ -440,19 +462,13 @@ direction and jump to the next/previous match.
 Read a pattern to search for a file name match in the forward/backward
 direction and jump to the next/previous match.
 
-(See also 'globsearch', 'incsearch', 'wrapscan', 'ignorecase', 'smartcase',
-'ignoredia', and 'smartdia' options and 'Searching Files' section)
-
     filter         (modal)
     setfilter
 
-Read a pattern to filter out and only view files matching the pattern.
-setfilter does the same but uses an argument to set the filter immediatly.
-You can supply an argument to filter, in order to use that as the starting
-prompt.
-
-(See also 'globsearch', 'incfilter', 'ignorecase', 'smartcase', 'ignoredia',
-and 'smartdia' options)
+Command 'filter' reads a pattern to filter out and only view files matching
+the pattern. Command 'setfilter' does the same but uses an argument to set
+the filter immediately. You can supply an argument to 'filter', in order to
+use that as the starting prompt.
 
     mark-save      (modal)   (default 'm')
 
@@ -467,6 +483,17 @@ or 'select' command.
     mark-remove    (modal)   (default '"')
 
 Remove a bookmark assigned to the given key.
+
+    tag
+
+Tag a file with '*' or a single width character given in the argument. You
+can define a new tag clearing command by combining 'tag' with 'tag-toggle'
+(i.e. 'cmd tag-clear :tag; tag-toggle').
+
+    tag-toggle               (default 't')
+
+Tag a file with '*' or a single width character given in the argument if the
+file is untagged, otherwise remove the tag.
 
 
 Command Line Commands
@@ -485,14 +512,12 @@ Quit command line mode and return to normal mode.
 Autocomplete the current word.
 
     cmd-menu-complete
-
-Autocomplete the current word, then you can press the binded key/s again to
-cycle completition options.
-
     cmd-menu-complete-back
 
-Autocomplete the current word, then you can press the binded key/s again to
-cycle completition options backwards.
+Autocomplete the current word with menu selection. You need to assign keys
+to these commands (e.g. 'cmap <tab> cmd-menu-complete; cmap <backtab>
+cmd-menu-complete-back'). You can use the assigned keys assigned to display
+the menu and then cycle through completion options.
 
     cmd-enter                (default '<c-j>' and '<enter>')
 
@@ -571,6 +596,14 @@ beginning of file names, otherwise, it can match at an arbitrary position.
 
 Automatically quit server when there are no clients left connected.
 
+    cleaner        string    (default '') (not called if empty)
+
+Set the path of a cleaner file. The file should be executable. This file is
+called if previewing is enabled, the previewer is set, and the previously
+selected file had its preview cache disabled. One argument is passed to the
+file, path to the file whose preview should be cleaned. Preview clearing is
+disabled when the value of this option is left empty.
+
     dircache       bool      (default on)
 
 Cache directory contents.
@@ -578,13 +611,12 @@ Cache directory contents.
     dircounts      bool      (default off)
 
 When this option is enabled, directory sizes show the number of items inside
-instead of the size of directory file. The former needs to be calculated by
-reading the directory and counting the items inside. The latter is directly
-provided by the operating system and it does not require any calculation,
-though it is non-intuitive and it can often be misleading. This option is
-disabled by default for performance reasons. This option only has an effect
-when 'info' has a 'size' field and the pane is wide enough to show the
-information. A thousand items are counted per directory at most, and bigger
+instead of the total size of the directory, which needs to be calculated for
+each directory using 'calcdirsize'. This information needs to be calculated
+by reading the directory and counting the items inside. Therefore, this
+option is disabled by default for performance reasons. This option only has
+an effect when 'info' has a 'size' field and the pane is wide enough to show
+the information. 999 items are counted per directory at most, and bigger
 directories are shown as '999+'.
 
     dirfirst       bool      (default on)
@@ -621,8 +653,8 @@ ranges. Otherwise, these characters are interpreted as they are.
 
     hidden         bool      (default off)
 
-Show hidden files. On unix systems, hidden files are determined by the value
-of 'hiddenfiles'. On windows, only files with hidden attributes are
+Show hidden files. On Unix systems, hidden files are determined by the value
+of 'hiddenfiles'. On Windows, only files with hidden attributes are
 considered hidden files.
 
     hiddenfiles    []string  (default '.*')
@@ -635,20 +667,16 @@ its matches are excluded from hidden files.
 
     icons          bool      (default off)
 
-Show icons before each item in the list. By default, only two icons, 🗀
-(U+1F5C0) and 🗎 (U+1F5CE), are used for directories and files respectively,
-as they are supported in the unicode standard. Icons can be configured with
-an environment variable named 'LF_ICONS'. The syntax of this variable is
-similar to 'LS_COLORS'. See the wiki page for an example icon configuration.
+Show icons before each item in the list.
 
     ifs            string    (default '')
 
 Sets 'IFS' variable in shell commands. It works by adding the assignment to
-the beginning of the command string as 'IFS='...'; ...'. The reason is that
+the beginning of the command string as "IFS='...'; ...". The reason is that
 'IFS' variable is not inherited by the shell for security reasons. This
 method assumes a POSIX shell syntax and so it can fail for non-POSIX shells.
 This option has no effect when the value is left empty. This option does not
-have any effect on windows.
+have any effect on Windows.
 
     ignorecase     bool      (default on)
 
@@ -673,6 +701,16 @@ Currently supported information types are 'size', 'time', 'atime', and
 'ctime'. Information is only shown when the pane width is more than twice
 the width of information.
 
+    infotimefmtnew string    (default 'Jan _2 15:04')
+
+Format string of the file time shown in the info column when it matches this
+year.
+
+    infotimefmtold string    (default 'Jan _2  2006')
+
+Format string of the file time shown in the info column when it doesn't
+match this year.
+
     mouse          bool      (default off)
 
 Send mouse events as input.
@@ -680,7 +718,7 @@ Send mouse events as input.
     number         bool      (default off)
 
 Show the position number for directory items at the left side of pane. When
-'relativenumber' is enabled, only the current line shows the absolute
+'relativenumber' option is enabled, only the current line shows the absolute
 position and relative positions are shown for the rest.
 
     period         int       (default 0)
@@ -703,21 +741,13 @@ binary files and displayed as 'binary'.
 
 Set the path of a previewer file to filter the content of regular files for
 previewing. The file should be executable. Five arguments are passed to the
-file, first is the current file name; the second, third, fourth, and fifth
-are width, height, horizontal position, and vertical position of preview
-pane respectively. SIGPIPE signal is sent when enough lines are read. If the
-previewer returns a non-zero exit code, then the preview cache for the given
-file is disabled. This means that if the file is selected in the future, the
-previewer is called once again. Preview filtering is disabled and files are
-displayed as they are when the value of this option is left empty.
-
-    cleaner        string    (default '') (not called if empty)
-
-Set the path of a cleaner file. This file will be called if previewing is
-enabled, the previewer is set, and the previously selected file had its
-preview cache disabled. The file should be executable. One argument is
-passed to the file; the path to the file whose preview should be cleaned.
-Preview clearing is disabled when the value of this option is left empty.
+file, (1) current file name, (2) width, (3) height, (4) horizontal position,
+and (5) vertical position of preview pane respectively. SIGPIPE signal is
+sent when enough lines are read. If the previewer returns a non-zero exit
+code, then the preview cache for the given file is disabled. This means that
+if the file is selected in the future, the previewer is called once again.
+Preview filtering is disabled and files are displayed as they are when the
+value of this option is left empty.
 
     promptfmt      string    (default "\033[32;1m%u@%h\033[0m:\033[34;1m%d\033[0m\033[1m%f\033[0m")
 
@@ -753,12 +783,12 @@ this option is set to a large value that is bigger than the half of number
 of lines. A smaller offset can be used when the current file is close to the
 beginning or end of the list to show the maximum number of items.
 
-    shell          string    (default 'sh' for unix and 'cmd' for windows)
+    shell          string    (default 'sh' for Unix and 'cmd' for Windows)
 
 Shell executable to use for shell commands. Shell commands are executed as
 'shell shellopts shellflag command -- arguments'.
 
-    shellflag      string    (default '-c' for unix and '/c' for windows)
+    shellflag      string    (default '-c' for Unix and '/c' for Windows)
 
 Command line flag used to pass shell commands.
 
@@ -786,27 +816,20 @@ Sort type for directories. Currently supported sort types are 'natural',
 Number of space characters to show for horizontal tabulation (U+0009)
 character.
 
+    tagfmt         string    (default "\033[31m%s\033[0m")
+
+Format string of the tags.
+
     tempmarks      string    (default '')
 
-A string that lists all marks to treat as temporary. They are not synced to
-other clients and are not saved in the bookmarks file. This option should be
-specified only in the global config file ("lfrc") as it may otherwise cause
-unintended side effects. Please note that the special bookmark "'" is always
-treated as temporary and does not need to be specified.
+Marks to be considered temporary (e.g. 'abc' refers to marks 'a', 'b', and
+'c'). These marks are not synced to other clients and they are not saved in
+the bookmarks file. Note that the special bookmark "'" is always treated as
+temporary and it does not need to be specified.
 
     timefmt        string    (default 'Mon Jan _2 15:04:05 2006')
 
 Format string of the file modification time shown in the bottom line.
-
-    infotimefmtnew string    (default 'Jan _2 15:04')
-
-Format string of the file time shown in the info column when it matches this
-year.
-
-    infotimefmtold string    (default 'Jan _2  2006')
-
-Format string of the file time shown in the info column when it doesn't
-match this year.
 
     truncatechar   string    (default '~')
 
@@ -876,17 +899,53 @@ set the value to 'start' in Windows, 'open' in MacOS, 'xdg-open' in others.
     EDITOR
 
 If this variable is set in the environment, use the same value, otherwise
-set the value to 'vi' on unix, 'notepad' in Windows.
+set the value to 'vi' on Unix, 'notepad' in Windows.
 
     PAGER
 
 If this variable is set in the environment, use the same value, otherwise
-set the value to 'less' on unix, 'more' in Windows.
+set the value to 'less' on Unix, 'more' in Windows.
 
     SHELL
 
 If this variable is set in the environment, use the same value, otherwise
-set the value to 'sh' on unix, 'cmd' in Windows.
+set the value to 'sh' on Unix, 'cmd' in Windows.
+
+    lf_{option}
+
+Value of the {option}.
+
+Special Commands
+
+    open
+
+This shell command can be defined to override the default 'open' command
+when the current file is not a directory.
+
+    paste
+
+This shell command can be defined to override the default 'paste' command.
+
+    rename
+
+This shell command can be defined to override the default 'paste' command.
+
+    delete
+
+This shell command can be defined to override the default 'delete' command.
+
+    pre-cd
+
+This shell command can be defined to be executed before changing a
+directory.
+
+    on-cd
+
+This shell command can be defined to be executed after changing a directory.
+
+    on-quit
+
+This shell command can be defined to be executed before quit.
 
 
 Prefixes
@@ -912,8 +971,8 @@ Characters from '#' to newline are comments and ignored:
 
     # comments start with '#'
 
-There are three special commands ('set', 'map', and 'cmd') and their
-variants for configuration.
+There are four special commands ('set', 'map', 'cmap', and 'cmd') for
+configuration.
 
 Command 'set' is used to set an option which can be boolean, integer, or
 string:
@@ -1123,7 +1182,7 @@ commands.
 
 Instead of pausing the ui, piping shell commands connects stdin, stdout, and
 stderr of the command to the statline in the bottom of the ui. This can be
-useful for programs following the unix philosophy to give no output in the
+useful for programs following the Unix philosophy to give no output in the
 success case, and brief error messages or prompts in other cases.
 
 For example, following rename command prompts for overwrite in the statline
@@ -1164,7 +1223,7 @@ any of the connected clients over the common server. This is used internally
 to notify file selection changes to other clients.
 
 To use this feature, you need to use a client which supports communicating
-with a UNIX-domain socket. OpenBSD implementation of netcat (nc) is one such
+with a Unix domain socket. OpenBSD implementation of netcat (nc) is one such
 example. You can use it to send a command to the socket file:
 
     echo 'send echo hello world' | nc -U ${XDG_RUNTIME_DIR:-/tmp}/lf.${USER}.sock
@@ -1355,22 +1414,22 @@ Previewing Files
 lf previews files on the preview pane by printing the file until the end or
 the preview pane is filled. This output can be enhanced by providing a
 custom preview script for filtering. This can be used to highlight source
-codes, list contents of archive files or view pdf or image files as text to
-name few. For coloring lf recognizes ansi escape codes.
+codes, list contents of archive files or view pdf or image files to name
+few. For coloring lf recognizes ansi escape codes.
 
 In order to use this feature you need to set the value of 'previewer' option
-to the path of an executable file. lf passes the current file name as the
-first argument and the height of the preview pane as the second argument
-when running this file. Output of the execution is printed in the preview
-pane. You may want to use the same script in your pager mapping as well if
-any:
+to the path of an executable file. Five arguments are passed to the file,
+(1) current file name, (2) width, (3) height, (4) horizontal position, and
+(5) vertical position of preview pane respectively. Output of the execution
+is printed in the preview pane. You may also want to use the same script in
+your pager mapping as well:
 
     set previewer ~/.config/lf/pv.sh
     map i $~/.config/lf/pv.sh $f | less -R
 
 For 'less' pager, you may instead utilize 'LESSOPEN' mechanism so that
-useful information about the file such as the full path of the file can be
-displayed in the statusline below:
+useful information about the file such as the full path of the file can
+still be displayed in the statusline below:
 
     set previewer ~/.config/lf/pv.sh
     map i $LESSOPEN='| ~/.config/lf/pv.sh %s' less -R $f
@@ -1419,8 +1478,8 @@ lf changes the working directory of the process to the current directory so
 that shell commands always work in the displayed directory. After quitting,
 it returns to the original directory where it is first launched like all
 shell programs. If you want to stay in the current directory after quitting,
-you can use one of the example wrapper shell scripts provided in the
-repository.
+you can use one of the example lfcd wrapper shell scripts provided in the
+repository at https://github.com/gokcehan/lf/tree/master/etc
 
 There is a special command 'on-cd' that runs a shell command when it is
 defined and the directory is changed. You can define it just as you would
@@ -1449,15 +1508,14 @@ title to the working directory:
 This command runs whenever you change directory but not on startup. You can
 add an extra call to make it run on startup as well:
 
-    cmd on-cd &{{ # ... }}
+    cmd on-cd &{{ ... }}
     on-cd
 
 Note that all shell commands are possible but '%' and '&' are usually more
 appropriate as '$' and '!' causes flickers and pauses respectively.
 
 There is also a 'pre-cd' command, that works like 'on-cd', but is run before
-the directory is actually changed. It is generally a bad idea, to put
-movement commands (like 'up' / 'top' etc.) here.
+the directory is actually changed.
 
 
 Colors
@@ -1488,11 +1546,11 @@ colors automatically. Depending on your terminal, you should be able to
 select your colors from a 24-bit palette. This is the recommended approach
 as colors used by other programs will also match each other.
 
-Second, you can set the values of environment variables mentioned above for
-fine grained customization. Note that 'LS_COLORS/LF_COLORS' are more
-powerful than 'LSCOLORS' and they can be used even when GNU programs are not
-installed on the system. You can combine this second method with the first
-method for best results.
+Second, you can set the values of environment variables or colors file
+mentioned above for fine grained customization. Note that
+'LS_COLORS/LF_COLORS' are more powerful than 'LSCOLORS' and they can be used
+even when GNU programs are not installed on the system. You can combine this
+second method with the first method for best results.
 
 Lastly, you may also want to configure the colors of the prompt line to
 match the rest of the colors. Colors of the prompt line can be configured
@@ -1500,13 +1558,13 @@ using the 'promptfmt' option which can include hardcoded colors as ansi
 escapes. See the default value of this option to have an idea about how to
 color this line.
 
-It is worth noting that lf uses as many colors are advertised by your
-terminal's entry in your systems terminfo or infocmp database, if this is
-not present lf will default to an internal database. For terminals
-supporting 24-bit (or "true") color that do not have a database entry (or
-one that does not advertise all capabilities), support can be enabled by
-either setting the '$COLORTERM' variable to "truecolor" or ensuring '$TERM'
-is set to a value that ends with "-truecolor".
+It is worth noting that lf uses as many colors advertised by your terminal's
+entry in terminfo or infocmp databases on your system. If an entry is not
+present, it falls back to an internal database. If your terminal supports
+24-bit colors but either does not have a database entry or does not
+advertise all capabilities, you can enable support by setting the
+'$COLORTERM' variable to 'truecolor' or ensuring '$TERM' is set to a value
+that ends with '-truecolor'.
 
 Default lf colors are mostly taken from GNU dircolors defaults. These
 defaults use 8 basic colors and bold attribute. Default dircolors entries
@@ -1530,7 +1588,7 @@ with their matching order in lf:
     ex  01;32
     fi  00
 
-Note that, lf first tries matching file names and then falls back to file
+Note that lf first tries matching file names and then falls back to file
 types. The full order of matchings from most specific to least are as
 follows:
 
@@ -1596,13 +1654,11 @@ newlines with backslashes as follows:
     "
 
 Having such a long variable definition in a shell configuration file might
-be undesirable. You may instead put this definition in a separate file and
-source it in your shell configuration file as follows:
-
-    [ -f "/path/to/colors" ] && source "/path/to/colors"
-
-See the wiki page for ansi escape codes
-https://en.wikipedia.org/wiki/ANSI_escape_code.
+be undesirable. You may instead use the colors file for configuration. A
+sample colors file can be found at
+https://github.com/gokcehan/lf/blob/master/etc/colors.example You may also
+see the wiki page for ansi escape codes
+https://en.wikipedia.org/wiki/ANSI_escape_code
 
 
 Icons
@@ -1615,21 +1671,21 @@ comments until the end of line. Do not forget to enable 'icons' option to
 see the icons. Default values are as follows given with their matching order
 in lf:
 
-    ln  🗎
-    or  🗎
-    tw  🗀
-    ow  🗀
-    st  🗀
-    di  🗀
-    pi  🗎
-    so  🗎
-    bd  🗎
-    cd  🗎
-    su  🗎
-    sg  🗎
-    ex  🗎
-    fi  🗎
+    ln  l
+    or  l
+    tw  t
+    ow  d
+    st  t
+    di  d
+    pi  p
+    so  s
+    bd  b
+    cd  c
+    su  u
+    sg  g
+    ex  x
+    fi  -
 
-See the wiki page for an example icons configuration
-https://github.com/gokcehan/lf/wiki/Icons.
+A sample icons file can be found at
+https://github.com/gokcehan/lf/blob/master/etc/icons.example
 `
