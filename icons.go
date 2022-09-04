@@ -19,7 +19,7 @@ func parseIcons() iconMap {
 		"ow=d",
 		"st=t",
 		"di=d",
-		"pi=p",
+		"pi=",
 		"so=s",
 		"bd=b",
 		"cd=c",
