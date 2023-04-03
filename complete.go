@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ var (
 	gCmdWords = []string{
 		"set",
 		"map",
+		"maps",
 		"cmap",
 		"cmd",
 		"quit",
@@ -35,6 +35,7 @@ var (
 		"low",
 		"toggle",
 		"invert",
+		"invert-below",
 		"unselect",
 		"glob-select",
 		"glob-unselect",
@@ -113,6 +114,9 @@ var (
 		"autoquit",
 		"noautoquit",
 		"autoquit!",
+		"cursoractivefmt",
+		"cursorparentfmt",
+		"cursorpreviewfmt",
 		"dircache",
 		"nodircache",
 		"dircache!",
@@ -190,6 +194,7 @@ var (
 		"history",
 		"ifs",
 		"info",
+		"numberfmt",
 		"previewer",
 		"cleaner",
 		"promptfmt",
@@ -249,7 +254,7 @@ func matchExec(s string) (matches []string, longest []rune) {
 			continue
 		}
 
-		files, err := ioutil.ReadDir(p)
+		files, err := os.ReadDir(p)
 		if err != nil {
 			log.Printf("reading path: %s", err)
 		}
@@ -259,18 +264,18 @@ func matchExec(s string) (matches []string, longest []rune) {
 				continue
 			}
 
-			f, err = os.Stat(filepath.Join(p, f.Name()))
+			finfo, err := f.Info()
 			if err != nil {
 				log.Printf("getting file information: %s", err)
 				continue
 			}
 
-			if !f.Mode().IsRegular() || !isExecutable(f) {
+			if !finfo.Mode().IsRegular() || !isExecutable(finfo) {
 				continue
 			}
 
-			log.Print(f.Name())
-			words = append(words, f.Name())
+			log.Print(finfo.Name())
+			words = append(words, finfo.Name())
 		}
 	}
 
@@ -303,7 +308,7 @@ func matchFile(s string) (matches []string, longest []rune) {
 
 	dir = filepath.Dir(unescape(dir))
 
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		log.Printf("reading directory: %s", err)
 	}
@@ -334,14 +339,14 @@ func matchFile(s string) (matches []string, longest []rune) {
 		}
 		matches = append(matches, item)
 
-		if longest != nil {
-			longest = matchLongest(longest, []rune(name))
-		} else if s != "" {
+		if longest == nil {
 			if f.Mode().IsRegular() {
 				longest = []rune(name + " ")
 			} else {
 				longest = []rune(name + escape(string(filepath.Separator)))
 			}
+		} else {
+			longest = matchLongest(longest, []rune(name))
 		}
 	}
 
@@ -421,7 +426,7 @@ func completeFile(acc []rune) (matches []string, longestAcc []rune) {
 		log.Printf("getting current directory: %s", err)
 	}
 
-	files, err := ioutil.ReadDir(wd)
+	files, err := os.ReadDir(wd)
 	if err != nil {
 		log.Printf("reading directory: %s", err)
 	}
@@ -433,10 +438,10 @@ func completeFile(acc []rune) (matches []string, longestAcc []rune) {
 
 		matches = append(matches, f.Name())
 
-		if longestAcc != nil {
-			longestAcc = matchLongest(longestAcc, []rune(f.Name()))
-		} else if s != "" {
+		if longestAcc == nil {
 			longestAcc = []rune(f.Name())
+		} else {
+			longestAcc = matchLongest(longestAcc, []rune(f.Name()))
 		}
 	}
 
