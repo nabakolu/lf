@@ -14,7 +14,9 @@ var (
 		"map",
 		"maps",
 		"cmap",
+		"cmaps",
 		"cmd",
+		"cmds",
 		"quit",
 		"up",
 		"half-up",
@@ -28,6 +30,7 @@ var (
 		"open",
 		"jump-next",
 		"jump-prev",
+		"jumps",
 		"top",
 		"bottom",
 		"high",
@@ -40,6 +43,7 @@ var (
 		"glob-select",
 		"glob-unselect",
 		"calcdirsize",
+		"clearmaps",
 		"copy",
 		"cut",
 		"paste",
@@ -114,6 +118,7 @@ var (
 		"autoquit",
 		"noautoquit",
 		"autoquit!",
+		"borderfmt",
 		"cursoractivefmt",
 		"cursorparentfmt",
 		"cursorpreviewfmt",
@@ -135,6 +140,7 @@ var (
 		"drawbox",
 		"nodrawbox",
 		"drawbox!",
+		"dupfilefmt",
 		"globsearch",
 		"noglobsearch",
 		"globsearch!",
@@ -171,6 +177,8 @@ var (
 		"reverse",
 		"noreverse",
 		"reverse!",
+		"ruler",
+		"preserve",
 		"smartcase",
 		"nosmartcase",
 		"smartcase!",
@@ -204,12 +212,14 @@ var (
 		"shellflag",
 		"shellopts",
 		"sortby",
+		"statfmt",
 		"timefmt",
 		"tempmarks",
 		"tagfmt",
 		"infotimefmtnew",
 		"infotimefmtold",
 		"truncatechar",
+		"truncatepct",
 	}
 )
 
@@ -274,7 +284,6 @@ func matchExec(s string) (matches []string, longest []rune) {
 				continue
 			}
 
-			log.Print(finfo.Name())
 			words = append(words, finfo.Name())
 		}
 	}
@@ -331,7 +340,7 @@ func matchFile(s string) (matches []string, longest []rune) {
 		if isRoot(s) || filepath.Base(s) != s {
 			name = filepath.Join(filepath.Dir(unescape(s)), f.Name())
 		}
-		name = escape(name)
+		name = escape(replaceTilde(name))
 
 		item := f.Name()
 		if f.Mode().IsDir() {

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	times "github.com/djherbis/times"
+	"github.com/djherbis/times"
 )
 
 type linkState byte
@@ -192,32 +192,60 @@ func (dir *dir) sort() {
 
 	dir.files = dir.allFiles
 
+	// reverse order cannot be applied after stable sorting, otherwise the order
+	// of equivalent elements will be reversed
+	reverse := dir.sortType.option&reverseSort != 0
+
 	switch dir.sortType.method {
 	case naturalSort:
 		sort.SliceStable(dir.files, func(i, j int) bool {
 			s1, s2 := normalize(dir.files[i].Name(), dir.files[j].Name(), dir.ignorecase, dir.ignoredia)
-			return naturalLess(s1, s2)
+			if !reverse {
+				return naturalLess(s1, s2)
+			} else {
+				return naturalLess(s2, s1)
+			}
 		})
 	case nameSort:
 		sort.SliceStable(dir.files, func(i, j int) bool {
 			s1, s2 := normalize(dir.files[i].Name(), dir.files[j].Name(), dir.ignorecase, dir.ignoredia)
-			return s1 < s2
+			if !reverse {
+				return s1 < s2
+			} else {
+				return s2 < s1
+			}
 		})
 	case sizeSort:
 		sort.SliceStable(dir.files, func(i, j int) bool {
-			return dir.files[i].TotalSize() < dir.files[j].TotalSize()
+			if !reverse {
+				return dir.files[i].TotalSize() < dir.files[j].TotalSize()
+			} else {
+				return dir.files[j].TotalSize() < dir.files[i].TotalSize()
+			}
 		})
 	case timeSort:
 		sort.SliceStable(dir.files, func(i, j int) bool {
-			return dir.files[i].ModTime().Before(dir.files[j].ModTime())
+			if !reverse {
+				return dir.files[i].ModTime().Before(dir.files[j].ModTime())
+			} else {
+				return dir.files[j].ModTime().Before(dir.files[i].ModTime())
+			}
 		})
 	case atimeSort:
 		sort.SliceStable(dir.files, func(i, j int) bool {
-			return dir.files[i].accessTime.Before(dir.files[j].accessTime)
+			if !reverse {
+				return dir.files[i].accessTime.Before(dir.files[j].accessTime)
+			} else {
+				return dir.files[j].accessTime.Before(dir.files[i].accessTime)
+			}
 		})
 	case ctimeSort:
 		sort.SliceStable(dir.files, func(i, j int) bool {
-			return dir.files[i].changeTime.Before(dir.files[j].changeTime)
+			if !reverse {
+				return dir.files[i].changeTime.Before(dir.files[j].changeTime)
+			} else {
+				return dir.files[j].changeTime.Before(dir.files[i].changeTime)
+			}
 		})
 	case extSort:
 		sort.SliceStable(dir.files, func(i, j int) bool {
@@ -236,14 +264,12 @@ func (dir *dir) sort() {
 
 			// in order to also have natural sorting with the filenames
 			// combine the name with the ext but have the ext at the front
-			return ext1 < ext2 || ext1 == ext2 && name1 < name2
+			if !reverse {
+				return ext1 < ext2 || ext1 == ext2 && name1 < name2
+			} else {
+				return ext2 < ext1 || ext2 == ext1 && name2 < name1
+			}
 		})
-	}
-
-	if dir.sortType.option&reverseSort != 0 {
-		for i, j := 0, len(dir.files)-1; i < j; i, j = i+1, j-1 {
-			dir.files[i], dir.files[j] = dir.files[j], dir.files[i]
-		}
 	}
 
 	if dir.sortType.option&dirfirstSort != 0 {
@@ -344,8 +370,27 @@ func (dir *dir) sel(name string, height int) {
 		}
 	}
 
-	edge := min(min(height/2, gOpts.scrolloff), len(dir.files)-dir.ind-1)
-	dir.pos = min(dir.ind, height-edge-1)
+	dir.boundPos(height)
+}
+
+func (dir *dir) boundPos(height int) {
+	if len(dir.files) <= height {
+		dir.pos = dir.ind
+		return
+	}
+
+	edge := min(height/2, gOpts.scrolloff)
+	dir.pos = max(dir.pos, edge)
+
+	// use a smaller value for half when the height is even and scrolloff is
+	// maxed in order to stay at the same row while scrolling up and down
+	if height%2 == 0 {
+		edge = min(height/2-1, gOpts.scrolloff)
+	}
+	dir.pos = min(dir.pos, height-1-edge)
+
+	dir.pos = min(dir.pos, dir.ind)
+	dir.pos = max(dir.pos, height-(len(dir.files)-dir.ind))
 }
 
 type nav struct {
@@ -470,10 +515,11 @@ func (nav *nav) checkDir(dir *dir) {
 		dir.ignorecase != gOpts.ignorecase ||
 		dir.ignoredia != gOpts.ignoredia:
 		dir.loading = true
+		sd := *dir
 		go func() {
-			dir.sort()
-			dir.loading = false
-			nav.dirChan <- dir
+			sd.sort()
+			sd.loading = false
+			nav.dirChan <- &sd
 		}()
 	}
 }
@@ -485,7 +531,9 @@ func (nav *nav) getDirs(wd string) {
 
 	for curr, base := wd, ""; !isRoot(base); curr, base = filepath.Dir(curr), filepath.Base(curr) {
 		dir := nav.loadDir(curr)
-		dir.sel(base, nav.height)
+		if base != "" {
+			dir.sel(base, nav.height)
+		}
 		dirs = append(dirs, dir)
 	}
 
@@ -573,13 +621,8 @@ func (nav *nav) reload() error {
 	nav.dirCache = make(map[string]*dir)
 	nav.regCache = make(map[string]*reg)
 
-	wd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("getting current directory: %s", err)
-	}
-
 	curr, err := nav.currFile()
-	nav.getDirs(wd)
+	nav.getDirs(nav.currDir().path)
 	if err == nil {
 		last := nav.dirs[len(nav.dirs)-1]
 		last.files = append(last.files, curr)
@@ -607,12 +650,24 @@ func (nav *nav) exportFiles() {
 
 	var currFile string
 	if curr, err := nav.currFile(); err == nil {
-		currFile = curr.path
+		currFile = quoteString(curr.path)
 	}
 
-	currSelections := nav.currSelections()
+	var selections []string
+	for _, selection := range nav.currSelections() {
+		selections = append(selections, quoteString(selection))
+	}
+	currSelections := strings.Join(selections, gOpts.filesep)
 
-	exportFiles(currFile, currSelections, nav.currDir().path)
+	os.Setenv("f", currFile)
+	os.Setenv("fs", currSelections)
+	os.Setenv("PWD", quoteString(nav.currDir().path))
+
+	if len(selections) == 0 {
+		os.Setenv("fx", currFile)
+	} else {
+		os.Setenv("fx", currSelections)
+	}
 }
 
 func (nav *nav) dirPreviewLoop(ui *ui) {
@@ -901,8 +956,7 @@ func (nav *nav) up(dist int) bool {
 	dir.ind = max(0, dir.ind)
 
 	dir.pos -= dist
-	edge := min(min(nav.height/2, gOpts.scrolloff), dir.ind)
-	dir.pos = max(dir.pos, edge)
+	dir.boundPos(nav.height)
 
 	return old != dir.ind
 }
@@ -925,14 +979,7 @@ func (nav *nav) down(dist int) bool {
 	dir.ind = min(maxind, dir.ind)
 
 	dir.pos += dist
-	edge := min(min(nav.height/2, gOpts.scrolloff), maxind-dir.ind)
-
-	// use a smaller value when the height is even and scrolloff is maxed
-	// in order to stay at the same row as much as possible while up/down
-	edge = min(edge, nav.height/2+nav.height%2-1)
-
-	dir.pos = min(dir.pos, nav.height-edge-1)
-	dir.pos = min(dir.pos, maxind)
+	dir.boundPos(nav.height)
 
 	return old != dir.ind
 }
@@ -1097,6 +1144,19 @@ func (nav *nav) low() bool {
 	dir.pos = end - beg - 1 - offs
 
 	return old != dir.ind
+}
+
+func (nav *nav) move(index int) bool {
+	old := nav.currDir().ind
+
+	switch {
+	case index < old:
+		return nav.up(old - index)
+	case index > old:
+		return nav.down(index - old)
+	default:
+		return false
+	}
 }
 
 func (nav *nav) toggleSelection(path string) {
@@ -1280,7 +1340,8 @@ func (nav *nav) moveAsync(app *app, srcs []string, dstDir string) {
 			continue
 		}
 
-		dst := filepath.Join(dstDir, filepath.Base(src))
+		file := filepath.Base(src)
+		dst := filepath.Join(dstDir, file)
 
 		dstStat, err := os.Stat(dst)
 		if os.SameFile(srcStat, dstStat) {
@@ -1289,9 +1350,15 @@ func (nav *nav) moveAsync(app *app, srcs []string, dstDir string) {
 			app.ui.exprChan <- echo
 			continue
 		} else if !os.IsNotExist(err) {
+			ext := filepath.Ext(file)
+			basename := filepath.Base(file[:len(file)-len(ext)])
 			var newPath string
 			for i := 1; !os.IsNotExist(err); i++ {
-				newPath = fmt.Sprintf("%s.~%d~", dst, i)
+				file = strings.ReplaceAll(gOpts.dupfilefmt, "%f", basename+ext)
+				file = strings.ReplaceAll(file, "%b", basename)
+				file = strings.ReplaceAll(file, "%e", ext)
+				file = strings.ReplaceAll(file, "%n", strconv.Itoa(i))
+				newPath = filepath.Join(dstDir, file)
 				_, err = os.Lstat(newPath)
 			}
 			dst = newPath
@@ -1524,13 +1591,18 @@ func (nav *nav) sel(path string) error {
 
 	base := filepath.Base(path)
 
-	last := nav.dirs[len(nav.dirs)-1]
+	last := nav.currDir()
 
 	if last.loading {
 		last.files = append(last.files, &file{FileInfo: lstat})
 	}
 
-	last.sel(base, nav.height)
+	for i, f := range last.files {
+		if f.Name() == base {
+			nav.move(i)
+			break
+		}
+	}
 
 	return nil
 }

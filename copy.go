@@ -5,6 +5,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/djherbis/times"
 )
 
 func copySize(srcs []string) (int64, error) {
@@ -33,6 +37,17 @@ func copySize(srcs []string) (int64, error) {
 }
 
 func copyFile(src, dst string, info os.FileInfo, nums chan int64) error {
+	var dst_mode os.FileMode = 0666
+	preserve_timestamps := false
+	for _, s := range gOpts.preserve {
+		switch s {
+		case "timestamps":
+			preserve_timestamps = true
+		case "mode":
+			dst_mode = info.Mode()
+		}
+	}
+
 	buf := make([]byte, 4096)
 
 	r, err := os.Open(src)
@@ -41,7 +56,7 @@ func copyFile(src, dst string, info os.FileInfo, nums chan int64) error {
 	}
 	defer r.Close()
 
-	w, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, info.Mode())
+	w, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, dst_mode)
 	if err != nil {
 		return err
 	}
@@ -70,6 +85,16 @@ func copyFile(src, dst string, info os.FileInfo, nums chan int64) error {
 		return err
 	}
 
+	if preserve_timestamps {
+		ts := times.Get(info)
+		mtime := info.ModTime()
+		atime := ts.AccessTime()
+		if err := os.Chtimes(dst, atime, mtime); err != nil {
+			os.Remove(dst)
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -79,13 +104,20 @@ func copyAll(srcs []string, dstDir string) (nums chan int64, errs chan error) {
 
 	go func() {
 		for _, src := range srcs {
-			dst := filepath.Join(dstDir, filepath.Base(src))
+			file := filepath.Base(src)
+			dst := filepath.Join(dstDir, file)
 
 			_, err := os.Lstat(dst)
 			if !os.IsNotExist(err) {
+				ext := filepath.Ext(file)
+				basename := filepath.Base(file[:len(file)-len(ext)])
 				var newPath string
 				for i := 1; !os.IsNotExist(err); i++ {
-					newPath = fmt.Sprintf("%s.~%d~", dst, i)
+					file = strings.ReplaceAll(gOpts.dupfilefmt, "%f", basename+ext)
+					file = strings.ReplaceAll(file, "%b", basename)
+					file = strings.ReplaceAll(file, "%e", ext)
+					file = strings.ReplaceAll(file, "%n", strconv.Itoa(i))
+					newPath = filepath.Join(dstDir, file)
 					_, err = os.Lstat(newPath)
 				}
 				dst = newPath

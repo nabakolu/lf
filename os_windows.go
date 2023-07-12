@@ -14,7 +14,7 @@ import (
 
 var (
 	envOpener = os.Getenv("OPENER")
-	envEditor = os.Getenv("EDITOR")
+	envEditor = os.Getenv("VISUAL")
 	envPager  = os.Getenv("PAGER")
 	envShell  = os.Getenv("SHELL")
 )
@@ -45,7 +45,10 @@ func init() {
 	}
 
 	if envEditor == "" {
-		envEditor = "notepad"
+		envEditor = os.Getenv("EDITOR")
+		if envEditor == "" {
+			envEditor = "notepad"
+		}
 	}
 
 	if envPager == "" {
@@ -65,7 +68,10 @@ func init() {
 	// remove domain prefix
 	gUser.Username = strings.Split(gUser.Username, `\`)[1]
 
-	data := os.Getenv("LOCALAPPDATA")
+	data := os.Getenv("LF_CONFIG_HOME")
+	if data == "" {
+		data = os.Getenv("LOCALAPPDATA")
+	}
 
 	gConfigPaths = []string{
 		filepath.Join(os.Getenv("ProgramData"), "lf", "lfrc"),
@@ -95,10 +101,23 @@ func detachedCommand(name string, arg ...string) *exec.Cmd {
 }
 
 func shellCommand(s string, args []string) *exec.Cmd {
+	// Windows CMD requires special handling to deal with quoted arguments
+	if strings.ToLower(gOpts.shell) == "cmd" {
+		var builder strings.Builder
+		builder.WriteString(s)
+		for _, arg := range args {
+			fmt.Fprintf(&builder, ` "%s"`, arg)
+		}
+		shellOpts := strings.Join(gOpts.shellopts, " ")
+		cmdline := fmt.Sprintf(`%s %s %s "%s"`, gOpts.shell, shellOpts, gOpts.shellflag, builder.String())
+
+		cmd := exec.Command(gOpts.shell)
+		cmd.SysProcAttr = &windows.SysProcAttr{CmdLine: cmdline}
+		return cmd
+	}
+
 	args = append([]string{gOpts.shellflag, s}, args...)
-
 	args = append(gOpts.shellopts, args...)
-
 	return exec.Command(gOpts.shell, args...)
 }
 
@@ -117,6 +136,8 @@ func setDefaults() {
 
 	gOpts.cmds["doc"] = &execExpr{"!", "%lf% -doc | %PAGER%"}
 	gOpts.keys["<f-1>"] = &callExpr{"doc", nil, 1}
+
+	gOpts.statfmt = "\033[36m%p\033[0m %s %t %L"
 }
 
 func setUserUmask() {}
@@ -160,24 +181,6 @@ func errCrossDevice(err error) bool {
 	return err.(*os.LinkError).Err.(windows.Errno) == 17
 }
 
-func exportFiles(f string, fs []string, pwd string) {
-	envFile := fmt.Sprintf(`"%s"`, f)
-
-	var quotedFiles []string
-	for _, f := range fs {
-		quotedFiles = append(quotedFiles, fmt.Sprintf(`"%s"`, f))
-	}
-	envFiles := strings.Join(quotedFiles, gOpts.filesep)
-
-	envPWD := fmt.Sprintf(`"%s"`, pwd)
-
-	os.Setenv("f", envFile)
-	os.Setenv("fs", envFiles)
-	os.Setenv("PWD", envPWD)
-
-	if len(fs) == 0 {
-		os.Setenv("fx", envFile)
-	} else {
-		os.Setenv("fx", envFiles)
-	}
+func quoteString(s string) string {
+	return fmt.Sprintf(`"%s"`, s)
 }

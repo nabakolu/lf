@@ -441,8 +441,16 @@ func (win *win) printDir(screen tcell.Screen, dir *dir, context *dirContext, dir
 			}
 		}
 
+		// make space for select marker, and leave another space at the end
+		maxWidth := win.w - lnwidth - 2
+		// make extra space to separate windows if drawbox is not enabled
+		if !gOpts.drawbox {
+			maxWidth -= 1
+		}
+
 		var s []rune
 
+		// leave space for displaying the tag
 		s = append(s, ' ')
 
 		if gOpts.icons {
@@ -450,40 +458,29 @@ func (win *win) printDir(screen tcell.Screen, dir *dir, context *dirContext, dir
 			s = append(s, ' ')
 		}
 
-		for _, r := range f.Name() {
-			s = append(s, r)
-		}
-
-		w := runeSliceWidth(s)
-
-		// make space for select marker, and leave another space at the end
-		maxlength := win.w - lnwidth - 2
-		// make extra space to separate windows if drawbox is not enabled
-		if !gOpts.drawbox {
-			maxlength -= 1
-		}
-
-		if w > maxlength {
-			s = runeSliceWidthRange(s, 0, maxlength-1)
-			s = append(s, []rune(gOpts.truncatechar)...)
-		} else {
-			for i := 0; i < maxlength-w; i++ {
-				s = append(s, ' ')
-			}
-		}
+		maxFilenameWidth := maxWidth - runeSliceWidth(s)
 
 		info := fileInfo(f, dir)
+		showInfo := len(info) > 0 && 2*len(info) < maxWidth
+		if showInfo {
+			maxFilenameWidth -= len(info)
+		}
 
-		if len(info) > 0 && 2*len(info) < maxlength {
-			if w+len(info) > maxlength {
-				s = runeSliceWidthRange(s, 0, maxlength-len(info)-1)
-				s = append(s, []rune(gOpts.truncatechar)...)
-			} else {
-				s = runeSliceWidthRange(s, 0, maxlength-len(info))
-			}
-			for _, r := range info {
-				s = append(s, r)
-			}
+		filename := []rune(f.Name())
+		if runeSliceWidth(filename) > maxFilenameWidth {
+			truncatePos := (maxFilenameWidth - 1) * gOpts.truncatepct / 100
+			lastPart := runeSliceWidthLastRange(filename, maxFilenameWidth-truncatePos-1)
+			filename = runeSliceWidthRange(filename, 0, truncatePos)
+			filename = append(filename, []rune(gOpts.truncatechar)...)
+			filename = append(filename, lastPart...)
+		}
+		for i := runeSliceWidth(filename); i < maxFilenameWidth; i++ {
+			filename = append(filename, ' ')
+		}
+		s = append(s, filename...)
+
+		if showInfo {
+			s = append(s, []rune(info)...)
 		}
 
 		ce := ""
@@ -654,10 +651,6 @@ func (ui *ui) echo(msg string) {
 	ui.msg = msg
 }
 
-func (ui *ui) echof(format string, a ...interface{}) {
-	ui.echo(fmt.Sprintf(format, a...))
-}
-
 func (ui *ui) echomsg(msg string) {
 	ui.msg = msg
 	log.Print(msg)
@@ -728,19 +721,21 @@ func (ui *ui) loadFileInfo(nav *nav) {
 		return
 	}
 
-	var linkTarget string
+	linkTargetArrow := ""
 	if curr.linkTarget != "" {
-		linkTarget = " -> " + curr.linkTarget
+		linkTargetArrow = "-> " + curr.linkTarget
 	}
 
-	ui.echof("%v %v%v%v%4s %v%s",
-		curr.Mode(),
-		linkCount(curr), // optional
-		userName(curr),  // optional
-		groupName(curr), // optional
-		humanize(curr.Size()),
-		curr.ModTime().Format(gOpts.timefmt),
-		linkTarget)
+	fileInfo := gOpts.statfmt
+	fileInfo = strings.Replace(fileInfo, "%p", curr.Mode().String(), -1)
+	fileInfo = strings.Replace(fileInfo, "%c", linkCount(curr), -1)
+	fileInfo = strings.Replace(fileInfo, "%u", userName(curr), -1)
+	fileInfo = strings.Replace(fileInfo, "%g", groupName(curr), -1)
+	fileInfo = strings.Replace(fileInfo, "%s", humanize(curr.Size()), -1)
+	fileInfo = strings.Replace(fileInfo, "%t", curr.ModTime().Format(gOpts.timefmt), -1)
+	fileInfo = strings.Replace(fileInfo, "%l", curr.linkTarget, -1)
+	fileInfo = strings.Replace(fileInfo, "%L", linkTargetArrow, -1)
+	ui.echo(fileInfo)
 }
 
 func (ui *ui) drawPromptLine(nav *nav) {
@@ -804,6 +799,18 @@ func (ui *ui) drawPromptLine(nav *nav) {
 	ui.promptWin.print(ui.screen, 0, 0, st, prompt)
 }
 
+func formatRulerOpt(name string, val string) string {
+	// handle escape character so it doesn't mess up the ruler
+	val = strings.ReplaceAll(val, "\033", "\033[7m\\033\033[0m")
+
+	// display name of builtin options for clarity
+	if !strings.HasPrefix(name, "lf_user_") {
+		val = fmt.Sprintf("%s=%s", strings.TrimPrefix(name, "lf_"), val)
+	}
+
+	return val
+}
+
 func (ui *ui) drawStatLine(nav *nav) {
 	st := tcell.StyleDefault
 
@@ -815,7 +822,7 @@ func (ui *ui) drawStatLine(nav *nav) {
 	ind := min(dir.ind+1, tot)
 	acc := string(ui.keyCount) + string(ui.keyAcc)
 
-	var selection string
+	selection := []string{}
 
 	if len(nav.saves) > 0 {
 		copy := 0
@@ -828,44 +835,66 @@ func (ui *ui) drawStatLine(nav *nav) {
 			}
 		}
 		if copy > 0 {
-			selection += fmt.Sprintf("  \033[33;7m %d \033[0m", copy)
+			selection = append(selection, fmt.Sprintf("\033[33;7m %d \033[0m", copy))
 		}
 		if move > 0 {
-			selection += fmt.Sprintf("  \033[31;7m %d \033[0m", move)
+			selection = append(selection, fmt.Sprintf("\033[31;7m %d \033[0m", move))
 		}
 	}
 
 	currSelections := nav.currSelections()
 	if len(currSelections) > 0 {
-		selection += fmt.Sprintf("  \033[35;7m %d \033[0m", len(currSelections))
+		selection = append(selection, fmt.Sprintf("\033[35;7m %d \033[0m", len(currSelections)))
 	}
 
-	if len(dir.filter) != 0 {
-		selection += "  \033[34;7m F \033[0m"
-	}
-
-	var progress string
+	progress := []string{}
 
 	if nav.copyTotal > 0 {
 		percentage := int((100 * float64(nav.copyBytes)) / float64(nav.copyTotal))
-		progress += fmt.Sprintf("  [%d%%]", percentage)
+		progress = append(progress, fmt.Sprintf("[%d%%]", percentage))
 	}
 
 	if nav.moveTotal > 0 {
-		progress += fmt.Sprintf("  [%d/%d]", nav.moveCount, nav.moveTotal)
+		progress = append(progress, fmt.Sprintf("[%d/%d]", nav.moveCount, nav.moveTotal))
 	}
 
 	if nav.deleteTotal > 0 {
-		progress += fmt.Sprintf("  [%d/%d]", nav.deleteCount, nav.deleteTotal)
+		progress = append(progress, fmt.Sprintf("[%d/%d]", nav.deleteCount, nav.deleteTotal))
 	}
 
-	ruler := fmt.Sprintf("%s%s%s  %d/%d", acc, progress, selection, ind, tot)
+	opts := getOptsMap()
+	ruler := []string{}
+	for _, s := range gOpts.ruler {
+		switch s {
+		case "df":
+			df := diskFree(dir.path)
+			if df != "" {
+				ruler = append(ruler, df)
+			}
+		case "acc":
+			ruler = append(ruler, acc)
+		case "progress":
+			ruler = append(ruler, progress...)
+		case "selection":
+			ruler = append(ruler, selection...)
+		case "filter":
+			if len(dir.filter) != 0 {
+				ruler = append(ruler, "\033[34;7m F \033[0m")
+			}
+		case "ind":
+			ruler = append(ruler, fmt.Sprintf("%d/%d", ind, tot))
+		default:
+			if val, ok := opts[s]; ok {
+				ruler = append(ruler, formatRulerOpt(s, val))
+			}
+		}
+	}
 
-	ui.msgWin.printRight(ui.screen, 0, st, ruler)
+	ui.msgWin.printRight(ui.screen, 0, st, strings.Join(ruler, "  "))
 }
 
 func (ui *ui) drawBox() {
-	st := tcell.StyleDefault
+	st := parseEscapeSequence(gOpts.borderfmt)
 
 	w, h := ui.screen.Size()
 
@@ -1018,7 +1047,7 @@ func findBinds(keys map[string]expr, prefix string) (binds map[string]expr, ok b
 	return
 }
 
-func listBinds(binds map[string]expr) *bytes.Buffer {
+func listExprMap(binds map[string]expr, title string) *bytes.Buffer {
 	t := new(tabwriter.Writer)
 	b := new(bytes.Buffer)
 
@@ -1029,9 +1058,41 @@ func listBinds(binds map[string]expr) *bytes.Buffer {
 	sort.Strings(keys)
 
 	t.Init(b, 0, gOpts.tabstop, 2, '\t', 0)
-	fmt.Fprintln(t, "keys\tcommand")
+	fmt.Fprintf(t, "%s\tcommand\n", title)
 	for _, k := range keys {
 		fmt.Fprintf(t, "%s\t%v\n", k, binds[k])
+	}
+	t.Flush()
+
+	return b
+}
+
+func listBinds(binds map[string]expr) *bytes.Buffer {
+	return listExprMap(binds, "keys")
+}
+
+func listCmds() *bytes.Buffer {
+	return listExprMap(gOpts.cmds, "name")
+}
+
+func listJumps(jumps []string, ind int) *bytes.Buffer {
+	t := new(tabwriter.Writer)
+	b := new(bytes.Buffer)
+
+	maxlength := len(strconv.Itoa(max(ind, len(jumps)-1-ind)))
+
+	t.Init(b, 0, gOpts.tabstop, 2, '\t', 0)
+	fmt.Fprintln(t, "  jump\tpath")
+	// print jumps in order of most recent, Vim uses the opposite order
+	for i := len(jumps) - 1; i >= 0; i-- {
+		switch {
+		case i < ind:
+			fmt.Fprintf(t, "  %*d\t%s\n", maxlength, ind-i, jumps[i])
+		case i > ind:
+			fmt.Fprintf(t, "  %*d\t%s\n", maxlength, i-ind, jumps[i])
+		default:
+			fmt.Fprintf(t, "> %*d\t%s\n", maxlength, 0, jumps[i])
+		}
 	}
 	t.Flush()
 
@@ -1063,36 +1124,63 @@ func (ui *ui) pollEvent() tcell.Event {
 	case val := <-ui.keyChan:
 		var ch rune
 		var mod tcell.ModMask
-
 		k := tcell.KeyRune
 
-		if utf8.RuneCountInString(val) == 1 {
+		if key, ok := gValKey[val]; ok {
+			return tcell.NewEventKey(key, ch, mod)
+		}
+
+		switch {
+		case utf8.RuneCountInString(val) == 1:
 			ch, _ = utf8.DecodeRuneInString(val)
-		} else {
-			switch {
-			case val == "<lt>":
-				ch = '<'
-			case val == "<gt>":
-				ch = '>'
-			case val == "<space>":
-				ch = ' '
-			case reAltKey.MatchString(val):
-				match := reAltKey.FindStringSubmatch(val)[1]
-				ch, _ = utf8.DecodeRuneInString(match)
-				mod = tcell.ModMask(tcell.ModAlt)
-			default:
-				if key, ok := gValKey[val]; ok {
-					k = key
-				} else {
-					k = tcell.KeyESC
-					ui.echoerrf("unknown key: %s", val)
-				}
+		case val == "<lt>":
+			ch = '<'
+		case val == "<gt>":
+			ch = '>'
+		case val == "<space>":
+			ch = ' '
+		case reModKey.MatchString(val):
+			matches := reModKey.FindStringSubmatch(val)
+			switch matches[1] {
+			case "c":
+				mod = tcell.ModCtrl
+			case "s":
+				mod = tcell.ModShift
+			case "a":
+				mod = tcell.ModAlt
 			}
+			val = matches[2]
+			if utf8.RuneCountInString(val) == 1 {
+				ch, _ = utf8.DecodeRuneInString(val)
+				break
+			} else if key, ok := gValKey["<"+val+">"]; ok {
+				k = key
+				break
+			}
+			fallthrough
+		default:
+			k = tcell.KeyESC
+			ui.echoerrf("unknown key: %s", val)
 		}
 
 		return tcell.NewEventKey(k, ch, mod)
 	case ev := <-ui.tevChan:
 		return ev
+	}
+}
+
+func addSpecialKeyModifier(val string, mod tcell.ModMask) string {
+	switch {
+	case !strings.HasPrefix(val, "<"):
+		return val
+	case mod == tcell.ModCtrl && !strings.HasPrefix(val, "<c-"):
+		return "<c-" + val[1:]
+	case mod == tcell.ModShift:
+		return "<s-" + val[1:]
+	case mod == tcell.ModAlt:
+		return "<a-" + val[1:]
+	default:
+		return val
 	}
 }
 
@@ -1123,6 +1211,7 @@ func (ui *ui) readNormalEvent(ev tcell.Event, nav *nav) expr {
 			}
 		} else {
 			val := gKeyVal[tev.Key()]
+			val = addSpecialKeyModifier(val, tev.Modifiers())
 			if val == "<esc>" && string(ui.keyAcc) != "" {
 				ui.keyAcc = nil
 				ui.keyCount = nil
@@ -1290,6 +1379,7 @@ func readCmdEvent(ev tcell.Event) expr {
 			}
 		} else {
 			val := gKeyVal[tev.Key()]
+			val = addSpecialKeyModifier(val, tev.Modifiers())
 			if expr, ok := gOpts.cmdkeys[val]; ok {
 				return expr
 			}

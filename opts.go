@@ -30,6 +30,7 @@ type sortType struct {
 var gOpts struct {
 	anchorfind       bool
 	autoquit         bool
+	borderfmt        string
 	cursoractivefmt  string
 	cursorparentfmt  string
 	cursorpreviewfmt string
@@ -38,6 +39,7 @@ var gOpts struct {
 	dironly          bool
 	dirpreviews      bool
 	drawbox          bool
+	dupfilefmt       string
 	globsearch       bool
 	icons            bool
 	ignorecase       bool
@@ -66,14 +68,18 @@ var gOpts struct {
 	selmode          string
 	shell            string
 	shellflag        string
+	statfmt          string
 	timefmt          string
 	infotimefmtnew   string
 	infotimefmtold   string
 	truncatechar     string
+	truncatepct      int
 	ratios           []int
 	hiddenfiles      []string
 	history          bool
 	info             []string
+	ruler            []string
+	preserve         []string
 	shellopts        []string
 	keys             map[string]expr
 	cmdkeys          map[string]expr
@@ -93,6 +99,8 @@ func init() {
 	gOpts.dironly = false
 	gOpts.dirpreviews = false
 	gOpts.drawbox = false
+	gOpts.dupfilefmt = "%f.~%n~"
+	gOpts.borderfmt = "\033[0m"
 	gOpts.cursoractivefmt = "\033[7m"
 	gOpts.cursorparentfmt = "\033[7m"
 	gOpts.cursorpreviewfmt = "\033[4m"
@@ -128,10 +136,13 @@ func init() {
 	gOpts.infotimefmtnew = "Jan _2 15:04"
 	gOpts.infotimefmtold = "Jan _2  2006"
 	gOpts.truncatechar = "~"
+	gOpts.truncatepct = 100
 	gOpts.ratios = []int{1, 2, 3}
 	gOpts.hiddenfiles = []string{".*"}
 	gOpts.history = true
 	gOpts.info = nil
+	gOpts.ruler = []string{"acc", "progress", "selection", "filter", "ind"}
+	gOpts.preserve = []string{"mode"}
 	gOpts.shellopts = nil
 	gOpts.sortType = sortType{naturalSort, dirfirstSort}
 	gOpts.tempmarks = "'"

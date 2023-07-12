@@ -18,7 +18,7 @@ import (
 
 var (
 	envOpener = os.Getenv("OPENER")
-	envEditor = os.Getenv("EDITOR")
+	envEditor = os.Getenv("VISUAL")
 	envPager  = os.Getenv("PAGER")
 	envShell  = os.Getenv("SHELL")
 )
@@ -51,7 +51,10 @@ func init() {
 	}
 
 	if envEditor == "" {
-		envEditor = "vi"
+		envEditor = os.Getenv("EDITOR")
+		if envEditor == "" {
+			envEditor = "vi"
+		}
 	}
 
 	if envPager == "" {
@@ -81,7 +84,10 @@ func init() {
 	}
 	gUser = u
 
-	config := os.Getenv("XDG_CONFIG_HOME")
+	config := os.Getenv("LF_CONFIG_HOME")
+	if config == "" {
+		config = os.Getenv("XDG_CONFIG_HOME")
+	}
 	if config == "" {
 		config = filepath.Join(gUser.HomeDir, ".config")
 	}
@@ -101,7 +107,10 @@ func init() {
 		filepath.Join(config, "lf", "icons"),
 	}
 
-	data := os.Getenv("XDG_DATA_HOME")
+	data := os.Getenv("LF_DATA_HOME")
+	if data == "" {
+		data = os.Getenv("XDG_DATA_HOME")
+	}
 	if data == "" {
 		data = filepath.Join(gUser.HomeDir, ".local", "share")
 	}
@@ -161,6 +170,8 @@ func setDefaults() {
 
 	gOpts.cmds["doc"] = &execExpr{"$", `"$lf" -doc | $PAGER`}
 	gOpts.keys["<f-1>"] = &callExpr{"doc", nil, 1}
+
+	gOpts.statfmt = "\033[36m%p\033[0m %c %u %g %s %t %L"
 }
 
 func setUserUmask() {
@@ -187,7 +198,7 @@ func isHidden(f os.FileInfo, path string, hiddenfiles []string) bool {
 func userName(f os.FileInfo) string {
 	if stat, ok := f.Sys().(*syscall.Stat_t); ok {
 		if u, err := user.LookupId(fmt.Sprint(stat.Uid)); err == nil {
-			return fmt.Sprintf("%v ", u.Username)
+			return u.Username
 		}
 	}
 	return ""
@@ -196,7 +207,7 @@ func userName(f os.FileInfo) string {
 func groupName(f os.FileInfo) string {
 	if stat, ok := f.Sys().(*syscall.Stat_t); ok {
 		if g, err := user.LookupGroupId(fmt.Sprint(stat.Gid)); err == nil {
-			return fmt.Sprintf("%v ", g.Name)
+			return g.Name
 		}
 	}
 	return ""
@@ -204,7 +215,7 @@ func groupName(f os.FileInfo) string {
 
 func linkCount(f os.FileInfo) string {
 	if stat, ok := f.Sys().(*syscall.Stat_t); ok {
-		return fmt.Sprintf("%v ", stat.Nlink)
+		return fmt.Sprint(stat.Nlink)
 	}
 	return ""
 }
@@ -213,17 +224,6 @@ func errCrossDevice(err error) bool {
 	return err.(*os.LinkError).Err.(unix.Errno) == unix.EXDEV
 }
 
-func exportFiles(f string, fs []string, pwd string) {
-	envFile := f
-	envFiles := strings.Join(fs, gOpts.filesep)
-
-	os.Setenv("f", envFile)
-	os.Setenv("fs", envFiles)
-	os.Setenv("PWD", pwd)
-
-	if len(fs) == 0 {
-		os.Setenv("fx", envFile)
-	} else {
-		os.Setenv("fx", envFiles)
-	}
+func quoteString(s string) string {
+	return s
 }

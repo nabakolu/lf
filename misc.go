@@ -31,23 +31,39 @@ func runeSliceWidth(rs []rune) int {
 }
 
 func runeSliceWidthRange(rs []rune, beg, end int) []rune {
+	if beg == end {
+		return []rune{}
+	}
+
 	curr := 0
 	b := 0
+	foundb := false
 	for i, r := range rs {
 		w := runewidth.RuneWidth(r)
-		switch {
-		case curr == beg:
+		if curr >= beg && !foundb {
 			b = i
-		case curr < beg && curr+w > beg:
-			b = i + 1
-		case curr == end:
+			foundb = true
+		}
+		if curr == end || curr+w > end {
 			return rs[b:i]
-		case curr > end:
-			return rs[b : i-1]
 		}
 		curr += w
 	}
-	return nil
+
+	return rs[b:]
+}
+
+// Returns the last runes of `rs` that take up at most `maxWidth` space.
+func runeSliceWidthLastRange(rs []rune, maxWidth int) []rune {
+	lastWidth := 0
+	for i := len(rs) - 1; i >= 0; i-- {
+		w := runewidth.RuneWidth(rs[i])
+		if lastWidth+w > maxWidth {
+			return rs[i+1:]
+		}
+		lastWidth += w
+	}
+	return rs
 }
 
 // This function is used to escape whitespaces and special characters with
@@ -275,7 +291,7 @@ func naturalLess(s1, s2 string) bool {
 	}
 }
 
-var reAltKey = regexp.MustCompile(`<a-(.)>`)
+var reModKey = regexp.MustCompile(`<(c|s|a)-(.+)>`)
 
 var reWord = regexp.MustCompile(`(\pL|\pN)+`)
 var reWordBeg = regexp.MustCompile(`([^\pL\pN]|^)(\pL|\pN)`)

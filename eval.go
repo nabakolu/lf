@@ -58,6 +58,8 @@ func (e *setExpr) eval(app *app, args []string) {
 			return
 		}
 		gOpts.autoquit = !gOpts.autoquit
+	case "borderfmt":
+		gOpts.borderfmt = e.val
 	case "cleaner":
 		gOpts.cleaner = replaceTilde(e.val)
 	case "cursoractivefmt":
@@ -228,6 +230,8 @@ func (e *setExpr) eval(app *app, args []string) {
 			app.nav.regCache = make(map[string]*reg)
 		}
 		app.ui.loadFile(app, true)
+	case "dupfilefmt":
+		gOpts.dupfilefmt = e.val
 	case "errorfmt":
 		gOpts.errorfmt = e.val
 	case "filesep":
@@ -482,6 +486,38 @@ func (e *setExpr) eval(app *app, args []string) {
 			}
 		}
 		gOpts.info = toks
+	case "ruler":
+		if e.val == "" {
+			gOpts.ruler = nil
+			return
+		}
+		toks := strings.Split(e.val, ":")
+		for _, s := range toks {
+			switch s {
+			case "df", "acc", "progress", "selection", "filter", "ind":
+			default:
+				if !strings.HasPrefix(s, "lf_") {
+					app.ui.echoerr("ruler: should consist of 'df', 'acc', 'progress', 'selection', 'filter', 'ind' or 'lf_<option_name>' separated with colon")
+					return
+				}
+			}
+		}
+		gOpts.ruler = toks
+	case "preserve":
+		if e.val == "" {
+			gOpts.preserve = nil
+			return
+		}
+		toks := strings.Split(e.val, ":")
+		for _, s := range toks {
+			switch s {
+			case "mode", "timestamps":
+			default:
+				app.ui.echoerr("preserve: should consist of 'mode' or 'timestamps separated with colon")
+				return
+			}
+		}
+		gOpts.preserve = toks
 	case "infotimefmtnew":
 		gOpts.infotimefmtnew = e.val
 	case "infotimefmtold":
@@ -677,7 +713,13 @@ func (e *setExpr) eval(app *app, args []string) {
 		}
 		gOpts.scrolloff = n
 	case "selmode":
-		gOpts.selmode = e.val
+		switch e.val {
+		case "all", "dir":
+			gOpts.selmode = e.val
+		default:
+			app.ui.echoerr("selmode: value should either be 'all' or 'dir'")
+			return
+		}
 	case "shell":
 		gOpts.shell = e.val
 	case "shellflag":
@@ -761,6 +803,8 @@ func (e *setExpr) eval(app *app, args []string) {
 		}
 		app.nav.sort()
 		app.ui.sort()
+	case "statfmt":
+		gOpts.statfmt = e.val
 	case "tabstop":
 		n, err := strconv.Atoi(e.val)
 		if err != nil {
@@ -789,6 +833,17 @@ func (e *setExpr) eval(app *app, args []string) {
 		}
 
 		gOpts.truncatechar = e.val
+	case "truncatepct":
+		n, err := strconv.Atoi(e.val)
+		if err != nil {
+			app.ui.echoerrf("truncatepct: %s", err)
+			return
+		}
+		if n < 0 || n > 100 {
+			app.ui.echoerrf("truncatepct: must be between 0 and 100 (both inclusive), got %d", n)
+			return
+		}
+		gOpts.truncatepct = n
 	case "waitmsg":
 		gOpts.waitmsg = e.val
 	case "wrapscan":
@@ -924,6 +979,11 @@ func doComplete(app *app) (matches []string) {
 
 func menuComplete(app *app, dir int) {
 	if !app.menuCompActive {
+		toks := tokenize(string(app.ui.cmdAccLeft))
+		for i, tok := range toks {
+			toks[i] = replaceTilde(tok)
+		}
+		app.ui.cmdAccLeft = []rune(strings.Join(toks, " "))
 		app.ui.cmdTmp = app.ui.cmdAccLeft
 		app.menuComps = doComplete(app)
 		if len(app.menuComps) > 1 {
@@ -1126,15 +1186,6 @@ func insert(app *app, arg string) {
 				return
 			}
 			app.nav.unselect()
-			if gSingleMode {
-				app.nav.renew()
-				app.ui.loadFile(app, true)
-			} else {
-				if err := remote("send load"); err != nil {
-					app.ui.echoerrf("delete: %s", err)
-					return
-				}
-			}
 			app.ui.loadFile(app, true)
 			app.ui.loadFileInfo(app.nav)
 		}
@@ -1425,7 +1476,13 @@ func (e *callExpr) eval(app *app, args []string) {
 		if !app.nav.init {
 			return
 		}
-		if app.nav.top() {
+		var moved bool
+		if e.count == 1 {
+			moved = app.nav.top()
+		} else {
+			moved = app.nav.move(e.count - 1)
+		}
+		if moved {
 			app.ui.loadFile(app, true)
 			app.ui.loadFileInfo(app.nav)
 		}
@@ -1433,7 +1490,15 @@ func (e *callExpr) eval(app *app, args []string) {
 		if !app.nav.init {
 			return
 		}
-		if app.nav.bottom() {
+		var moved bool
+		if e.count == 1 {
+			// Different from Vim, which would treat a count of 1 as meaning to
+			// move to the first line (i.e. the top)
+			moved = app.nav.bottom()
+		} else {
+			moved = app.nav.move(e.count - 1)
+		}
+		if moved {
 			app.ui.loadFile(app, true)
 			app.ui.loadFileInfo(app.nav)
 		}
@@ -1555,6 +1620,10 @@ func (e *callExpr) eval(app *app, args []string) {
 		app.ui.loadFileInfo(app.nav)
 		app.nav.sort()
 		app.ui.sort()
+	case "clearmaps":
+		// leave `:` and cmaps bound so the user can still exit using `:quit`
+		gOpts.keys = make(map[string]expr)
+		gOpts.keys[":"] = &callExpr{"read", nil, 1}
 	case "copy":
 		if !app.nav.init {
 			return
@@ -1679,13 +1748,16 @@ func (e *callExpr) eval(app *app, args []string) {
 			app.nav.height = app.ui.wins[0].h
 			app.nav.regCache = make(map[string]*reg)
 		}
+		for _, dir := range app.nav.dirs {
+			dir.boundPos(app.nav.height)
+		}
 		app.ui.loadFile(app, true)
 	case "load":
 		if !app.nav.init {
 			return
 		}
 		app.nav.renew()
-		app.ui.loadFile(app, true)
+		app.ui.loadFile(app, false)
 	case "reload":
 		if !app.nav.init {
 			return
@@ -2083,7 +2155,7 @@ func (e *callExpr) eval(app *app, args []string) {
 		app.menuCompActive = false
 	case "cmd-enter":
 		s := string(append(app.ui.cmdAccLeft, app.ui.cmdAccRight...))
-		if len(s) == 0 && app.ui.cmdPrefix != "filter: " {
+		if len(s) == 0 && app.ui.cmdPrefix != "filter: " && app.ui.cmdPrefix != ">" {
 			return
 		}
 
@@ -2185,64 +2257,60 @@ func (e *callExpr) eval(app *app, args []string) {
 			}
 		case "rename: ":
 			app.ui.cmdPrefix = ""
-			if curr, err := app.nav.currFile(); err != nil {
+
+			curr, err := app.nav.currFile()
+			if err != nil {
 				app.ui.echoerrf("rename: %s", err)
-			} else {
-				wd, err := os.Getwd()
-				if err != nil {
-					log.Printf("getting current directory: %s", err)
-					return
-				}
-
-				oldPath := filepath.Join(wd, curr.Name())
-
-				newPath := filepath.Clean(replaceTilde(s))
-				if !filepath.IsAbs(newPath) {
-					newPath = filepath.Join(wd, newPath)
-				}
-
-				if oldPath == newPath {
-					return
-				}
-
-				app.nav.renameOldPath = oldPath
-				app.nav.renameNewPath = newPath
-
-				newDir := filepath.Dir(newPath)
-				if _, err := os.Stat(newDir); os.IsNotExist(err) {
-					app.ui.cmdPrefix = "create '" + newDir + "' ? [y/N] "
-					return
-				}
-
-				oldStat, err := os.Lstat(oldPath)
-				if err != nil {
-					app.ui.echoerrf("rename: %s", err)
-					return
-				}
-
-				if newStat, err := os.Lstat(newPath); !os.IsNotExist(err) && !os.SameFile(oldStat, newStat) {
-					app.ui.cmdPrefix = "replace '" + newPath + "' ? [y/N] "
-					return
-				}
-
-				if err := app.nav.rename(); err != nil {
-					app.ui.echoerrf("rename: %s", err)
-					return
-				}
-
-				if gSingleMode {
-					app.nav.renew()
-					app.ui.loadFile(app, true)
-				} else {
-					if err := remote("send load"); err != nil {
-						app.ui.echoerrf("rename: %s", err)
-						return
-					}
-				}
-
-				app.ui.loadFile(app, true)
-				app.ui.loadFileInfo(app.nav)
+				return
 			}
+			wd, err := os.Getwd()
+			if err != nil {
+				log.Printf("getting current directory: %s", err)
+				return
+			}
+
+			oldPath := filepath.Join(wd, curr.Name())
+			newPath := filepath.Clean(replaceTilde(s))
+			if !filepath.IsAbs(newPath) {
+				newPath = filepath.Join(wd, newPath)
+			}
+			if oldPath == newPath {
+				return
+			}
+			app.nav.renameOldPath = oldPath
+			app.nav.renameNewPath = newPath
+
+			newDir := filepath.Dir(newPath)
+			if _, err := os.Stat(newDir); os.IsNotExist(err) {
+				app.ui.cmdPrefix = "create '" + newDir + "' ? [y/N] "
+				return
+			}
+
+			oldStat, err := os.Lstat(oldPath)
+			if err != nil {
+				app.ui.echoerrf("rename: %s", err)
+				return
+			}
+			if newStat, err := os.Lstat(newPath); !os.IsNotExist(err) && !os.SameFile(oldStat, newStat) {
+				app.ui.cmdPrefix = "replace '" + newPath + "' ? [y/N] "
+				return
+			}
+
+			if err := app.nav.rename(); err != nil {
+				app.ui.echoerrf("rename: %s", err)
+				return
+			}
+
+			if gSingleMode {
+				app.nav.renew()
+			} else {
+				if err := remote("send load"); err != nil {
+					app.ui.echoerrf("rename: %s", err)
+					return
+				}
+			}
+			app.ui.loadFile(app, true)
+			app.ui.loadFileInfo(app.nav)
 		default:
 			log.Printf("entering unknown execution prefix: %q", app.ui.cmdPrefix)
 		}
@@ -2288,9 +2356,10 @@ func (e *callExpr) eval(app *app, args []string) {
 			switch app.ui.cmdPrefix {
 			case "!", "$", "%", "&":
 				app.ui.cmdPrefix = ":"
-			case ">", "rename: ":
+			case ">", "rename: ", "filter: ":
 				// Don't mess with programs waiting for input.
-				// Exiting on backspace is also inconvenient for renames since the text field starts out nonempty.
+				// Exiting on backspace is also inconvenient for 'rename' and 'filter',
+				// since the text field can start out nonempty.
 			default:
 				normal(app)
 			}
@@ -2466,11 +2535,14 @@ func (e *callExpr) eval(app *app, args []string) {
 
 		app.ui.cmdAccLeft = acc
 		update(app)
+	case "cmds":
+		app.runPagerOn(listCmds())
 	case "maps":
-		cleanUp := app.runShell("$PAGER", nil, "$|")
-		io.Copy(app.cmdIn, listBinds(gOpts.keys))
-		app.cmdIn.Close()
-		cleanUp()
+		app.runPagerOn(listBinds(gOpts.keys))
+	case "cmaps":
+		app.runPagerOn(listBinds(gOpts.cmdkeys))
+	case "jumps":
+		app.runPagerOn(listJumps(app.nav.jumpList, app.nav.jumpListInd))
 	default:
 		cmd, ok := gOpts.cmds[e.name]
 		if !ok {
