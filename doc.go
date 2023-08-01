@@ -167,7 +167,7 @@ The following options can be used to customize the behavior of lf:
 	smartcase        bool      (default true)
 	smartdia         bool      (default false)
 	sortby           string    (default 'natural')
-	statfmt          string    (default "\033[36m%p\033[0m %c %u %g %s %t %L")
+	statfmt          string    (default "\033[36m%p\033[0m| %c| %u| %g| %s| %t| -> %l")
 	tabstop          int       (default 8)
 	tagfmt           string    (default "\033[31m")
 	tempmarks        string    (default '')
@@ -673,8 +673,8 @@ Format string of the box drawing characters enabled by the `drawbox` option.
 Set the path of a cleaner file.
 The file should be executable.
 This file is called if previewing is enabled, the previewer is set, and the previously selected file had its preview cache disabled.
-Five arguments are passed to the file, (1) current file name, (2) width, (3) height, (4) horizontal position, and (5) vertical position of preview pane respectively.
-Preview clearing is disabled when the value of this option is left empty.
+The following arguments are passed to the file, (1) current file name, (2) width, (3) height, (4) horizontal position, (5) vertical position of preview pane and (6) next file name to be previewed respectively.
+Preview cleaning is disabled when the value of this option is left empty.
 
 	cursoractivefmt   string    (default "\033[7m")
 	cursorparentfmt   string    (default "\033[7m")
@@ -844,7 +844,7 @@ Files containing the null character (U+0000) in the read portion are considered 
 
 Set the path of a previewer file to filter the content of regular files for previewing.
 The file should be executable.
-Five arguments are passed to the file, (1) current file name, (2) width, (3) height, (4) horizontal position, and (5) vertical position of preview pane respectively.
+The following arguments are passed to the file, (1) current file name, (2) width, (3) height, (4) horizontal position, and (5) vertical position of preview pane respectively.
 SIGPIPE signal is sent when enough lines are read.
 If the previewer returns a non-zero exit code, then the preview cache for the given file is disabled.
 This means that if the file is selected in the future, the previewer is called once again.
@@ -925,11 +925,11 @@ This option has no effect when 'ignoredia' is disabled.
 Sort type for directories.
 Currently supported sort types are 'natural', 'name', 'size', 'time', 'ctime', 'atime', and 'ext'.
 
-	statfmt    string    (default "\033[36m%p\033[0m %c %u %g %s %t %L")
+	statfmt    string        (default "\033[36m%p\033[0m| %c| %u| %g| %s| %t| -> %l")
 
 Format string of the file info shown in the bottom left corner.
-Special expansions are provided, '%p' as the file permissions, '%c' as the link count, '%u' as the user, '%g' as the group, '%s' as the file size, '%t' as the last modified time, and '%l' as the link target if it exists (otherwise a blank string). '%L' is the same as '%l' but with an arrow '-> ' prepended.
-On Windows, the link count, user and group fields are not supported and will be replaced with a blank string if specified. The default for Windows is "\033[36m%p\033[0m %s %t %L".
+Special expansions are provided, '%p' as the file permissions, '%c' as the link count, '%u' as the user, '%g' as the group, '%s' as the file size, '%t' as the last modified time, and '%l' as the link target.
+The `|` character splits the format string into sections. Any section containing a failed expansion (result is a blank string) is discarded and not shown.
 
 	tabstop        int       (default 8)
 
