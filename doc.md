@@ -102,6 +102,7 @@ The following commands are provided by lf:
 	mark-remove    (modal)   (default '"')
 	tag
 	tag-toggle               (default 't')
+	selection-quit
 
 The following command line commands are provided by lf:
 
@@ -565,6 +566,10 @@ You can define a new tag-clearing command by combining `tag` with `tag-toggle` (
 ## tag-toggle (default `t`)
 
 Tag a file with `*` or a single width character given in the argument if the file is untagged, otherwise remove the tag.
+
+## selection-quit
+
+Print the selection to stdout if `--print-selection` is set, or write it to the specified file, if `--selection-path` is set.
 
 # COMMAND LINE COMMANDS
 
