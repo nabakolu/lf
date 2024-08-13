@@ -70,6 +70,7 @@ var (
 		"search-next",
 		"search-prev",
 		"select",
+		"selection-quit",
 		"setfilter",
 		"shell",
 		"shell-async",

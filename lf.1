@@ -229,6 +229,9 @@ clearmaps
 tty\-write
 visual                   (default \(aqV\(aq)
 .EE
+selection-quit
+\f[R]
+.fi
 .PP
 The following Visual mode commands are provided by lf:
 .IP
@@ -707,6 +710,10 @@ OSC 0 to set the window title).
 Using \f[CR]tty\-write\f[R] is preferred over directly writing to
 \f[CR]/dev/tty\f[R] because the latter is not synchronized and can
 interfere with drawing the UI.
+.SS selection\-quit
+.PP
+Print the selection to stdout if --print-selection is set,
+or write it to the specified file, if --selection-path is set.
 .SS visual (default \f[CR]V\f[R])
 Switch to Visual mode.
 If already in Visual mode, discard the visual selection and stay in

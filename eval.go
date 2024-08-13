@@ -1040,6 +1040,17 @@ func (e *callExpr) eval(app *app, _ []string) {
 		app.ui.loadFile(app, true)
 		restartIncCmd(app)
 		onChdir(app)
+	case "selection-quit":
+		if !app.nav.init {
+			return
+		}
+		if gSelectionPath != "" || gPrintSelection {
+			app.selectionOut, _ = app.nav.currFileOrSelections()
+			app.quitChan <- struct{}{}
+			return
+		} else {
+			app.ui.echoerrf("neither --print-selection nor --selection-path are set")
+        }
 	case "open":
 		curr := app.nav.currFile()
 		if curr == nil {

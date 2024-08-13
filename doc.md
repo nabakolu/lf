@@ -210,6 +210,7 @@ The following commands are provided by lf:
 	clearmaps
 	tty-write
 	visual                   (default 'V')
+	selection-quit
 
 The following Visual mode commands are provided by lf:
 
@@ -658,6 +659,12 @@ Tag a file with `*` or a single-width character given in the argument if the fil
 ## echo
 
 Print the given arguments to the message line at the bottom.
+
+## selection-quit
+
+Print the selection to stdout if `--print-selection` is set, or write it to the specified file, if `--selection-path` is set.
+
+# COMMAND LINE COMMANDS
 
 ## echomsg
 
