@@ -1041,9 +1041,6 @@ func (e *callExpr) eval(app *app, _ []string) {
 		restartIncCmd(app)
 		onChdir(app)
 	case "selection-quit":
-		if !app.nav.init {
-			return
-		}
 		if gSelectionPath != "" || gPrintSelection {
 			app.selectionOut, _ = app.nav.currFileOrSelections()
 			app.quitChan <- struct{}{}

@@ -188,10 +188,6 @@ func (im iconMap) get(f *file) iconDef {
 	//	return val
 	//}
 
-	if val, ok := im["fi"]; ok {
-		return val
-	}
-
 	if val, ok := im.icons["fi"]; ok {
 		return val
 	}
