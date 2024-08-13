@@ -5,12 +5,34 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gdamore/tcell/v2"
 )
 
-type iconMap map[string]string
+type iconDef struct {
+	icon     string
+	hasStyle bool
+	style    tcell.Style
+}
+
+type iconMap struct {
+	icons         map[string]iconDef
+	useLinkTarget bool
+}
+
+func iconWithoutStyle(icon string) iconDef {
+	return iconDef{icon, false, tcell.StyleDefault}
+}
+
+func iconWithStyle(icon string, style tcell.Style) iconDef {
+	return iconDef{icon, true, style}
+}
 
 func parseIcons() iconMap {
-	im := make(iconMap)
+	im := iconMap{
+		icons:         make(map[string]iconDef),
+		useLinkTarget: false,
+	}
 
 	defaultIcons := []string{
 		"ln=l",
@@ -44,7 +66,7 @@ func parseIcons() iconMap {
 	return im
 }
 
-func (im iconMap) parseFile(path string) {
+func (im *iconMap) parseFile(path string) {
 	log.Printf("reading file: %s", path)
 
 	f, err := os.Open(path)
@@ -54,26 +76,18 @@ func (im iconMap) parseFile(path string) {
 	}
 	defer f.Close()
 
-	pairs, err := readPairs(f)
+	arrs, err := readArrays(f, 1, 3)
 	if err != nil {
 		log.Printf("reading icons file: %s", err)
 		return
 	}
 
-	for _, pair := range pairs {
-		key, val := pair[0], pair[1]
-
-		key = replaceTilde(key)
-
-		if filepath.IsAbs(key) {
-			key = filepath.Clean(key)
-		}
-
-		im[key] = val
+	for _, arr := range arrs {
+		im.parseArray(arr)
 	}
 }
 
-func (im iconMap) parseEnv(env string) {
+func (im *iconMap) parseEnv(env string) {
 	for _, entry := range strings.Split(env, ":") {
 		if entry == "" {
 			continue
@@ -86,25 +100,42 @@ func (im iconMap) parseEnv(env string) {
 			return
 		}
 
-		key, val := pair[0], pair[1]
-
-		key = replaceTilde(key)
-
-		if filepath.IsAbs(key) {
-			key = filepath.Clean(key)
-		}
-
-		im[key] = val
+		im.parseArray(pair)
 	}
 }
 
-func (im iconMap) get(f *file) string {
-	if val, ok := im[f.path]; ok {
+func (im *iconMap) parseArray(arr []string) {
+	key := arr[0]
+
+	key = replaceTilde(key)
+
+	if filepath.IsAbs(key) {
+		key = filepath.Clean(key)
+	}
+
+	switch len(arr) {
+	case 1:
+		delete(im.icons, key)
+	case 2:
+		icon := arr[1]
+		if key == "ln" && icon == "target" {
+			im.useLinkTarget = true
+		} else {
+			im.icons[key] = iconWithoutStyle(icon)
+		}
+	case 3:
+		icon, color := arr[1], arr[2]
+		im.icons[key] = iconWithStyle(icon, applyAnsiCodes(color, tcell.StyleDefault))
+	}
+}
+
+func (im iconMap) get(f *file) iconDef {
+	if val, ok := im.icons[f.path]; ok {
 		return val
 	}
 
 	if f.IsDir() {
-		if val, ok := im[f.Name()+"/"]; ok {
+		if val, ok := im.icons[f.Name()+"/"]; ok {
 			return val
 		}
 	}
@@ -112,13 +143,13 @@ func (im iconMap) get(f *file) string {
 	var key string
 
 	switch {
-	case f.linkState == working:
+	case f.linkState == working && !im.useLinkTarget:
 		key = "ln"
 	case f.linkState == broken:
 		key = "or"
-	case f.IsDir() && f.Mode()&os.ModeSticky != 0 && f.Mode()&0002 != 0:
+	case f.IsDir() && f.Mode()&os.ModeSticky != 0 && f.Mode()&0o002 != 0:
 		key = "tw"
-	case f.IsDir() && f.Mode()&0002 != 0:
+	case f.IsDir() && f.Mode()&0o002 != 0:
 		key = "ow"
 	case f.IsDir() && f.Mode()&os.ModeSticky != 0:
 		key = "st"
@@ -128,33 +159,33 @@ func (im iconMap) get(f *file) string {
 		key = "pi"
 	case f.Mode()&os.ModeSocket != 0:
 		key = "so"
-	case f.Mode()&os.ModeDevice != 0:
-		key = "bd"
 	case f.Mode()&os.ModeCharDevice != 0:
 		key = "cd"
+	case f.Mode()&os.ModeDevice != 0:
+		key = "bd"
 	case f.Mode()&os.ModeSetuid != 0:
 		key = "su"
 	case f.Mode()&os.ModeSetgid != 0:
 		key = "sg"
 	}
 
-	if val, ok := im[key]; ok {
+	if val, ok := im.icons[key]; ok {
 		return val
 	}
 
-	if val, ok := im[f.Name()+"*"]; ok {
+	if val, ok := im.icons[f.Name()+"*"]; ok {
 		return val
 	}
 
-	if val, ok := im["*"+f.Name()]; ok {
+	if val, ok := im.icons["*"+f.Name()]; ok {
 		return val
 	}
 
-	if val, ok := im[filepath.Base(f.Name())+".*"]; ok {
+	if val, ok := im.icons[filepath.Base(f.Name())+".*"]; ok {
 		return val
 	}
 
-	if val, ok := im["*"+strings.ToLower(f.ext)]; ok {
+	if val, ok := im.icons["*"+strings.ToLower(f.ext)]; ok {
 		return val
 	}
 
@@ -162,10 +193,9 @@ func (im iconMap) get(f *file) string {
 	//if val, ok := im["ex"]; ok && f.Mode()&0111 != 0 {
 	//	return val
 	//}
-
-	if val, ok := im["fi"]; ok {
+	if val, ok := im.icons["fi"]; ok {
 		return val
 	}
 
-	return " "
+	return iconWithoutStyle(" ")
 }

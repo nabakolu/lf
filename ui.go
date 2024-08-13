@@ -252,7 +252,7 @@ func (win *win) printRight(screen tcell.Screen, y int, st tcell.Style, s string)
 	win.print(screen, win.w-printLength(s), y, st, s)
 }
 
-func (win *win) printReg(screen tcell.Screen, reg *reg, previewLoading bool) {
+func (win *win) printReg(screen tcell.Screen, reg *reg, previewLoading bool, sxs *sixelScreen) {
 	if reg == nil {
 		return
 	}
@@ -274,6 +274,8 @@ func (win *win) printReg(screen tcell.Screen, reg *reg, previewLoading bool) {
 
 		st = win.print(screen, 2, i, st, l)
 	}
+
+	sxs.printSixel(win, screen, reg)
 }
 
 var gThisYear = time.Now().Year()
@@ -288,30 +290,30 @@ func infotimefmt(t time.Time) string {
 func fileInfo(f *file, d *dir) string {
 	var info string
 
-	for _, s := range gOpts.info {
+	for _, s := range getInfo(d.path) {
 		switch s {
 		case "size":
-			if !(f.IsDir() && gOpts.dircounts) {
-				var sz string
-				if f.IsDir() && f.dirSize < 0 {
-					sz = "-"
-				} else {
-					sz = humanize(f.TotalSize())
+			if f.IsDir() && gOpts.dircounts {
+				switch {
+				case f.dirCount < -1:
+					info = fmt.Sprintf("%s    !", info)
+				case f.dirCount < 0:
+					info = fmt.Sprintf("%s    ?", info)
+				case f.dirCount < 1000:
+					info = fmt.Sprintf("%s %4d", info, f.dirCount)
+				default:
+					info = fmt.Sprintf("%s 999+", info)
 				}
-				info = fmt.Sprintf("%s %4s", info, sz)
 				continue
 			}
 
-			switch {
-			case f.dirCount < -1:
-				info = fmt.Sprintf("%s    !", info)
-			case f.dirCount < 0:
-				info = fmt.Sprintf("%s    ?", info)
-			case f.dirCount < 1000:
-				info = fmt.Sprintf("%s %4d", info, f.dirCount)
-			default:
-				info = fmt.Sprintf("%s 999+", info)
+			var sz string
+			if f.IsDir() && f.dirSize < 0 {
+				sz = "-"
+			} else {
+				sz = humanize(f.TotalSize())
 			}
+			info = fmt.Sprintf("%s %4s", info, sz)
 		case "time":
 			info = fmt.Sprintf("%s %*s", info, max(len(gOpts.infotimefmtnew), len(gOpts.infotimefmtold)), infotimefmt(f.ModTime()))
 		case "atime":
@@ -346,12 +348,7 @@ type dirStyle struct {
 	role   dirRole
 }
 
-// These colors are not currently customizeable
-const SelectionColor = tcell.ColorPurple
-const YankColor = tcell.ColorOlive
-const CutColor = tcell.ColorMaroon
-
-func (win *win) printDir(screen tcell.Screen, dir *dir, context *dirContext, dirStyle *dirStyle, previewLoading bool) {
+func (win *win) printDir(ui *ui, dir *dir, context *dirContext, dirStyle *dirStyle, previewLoading bool) {
 	if win.w < 5 || dir == nil {
 		return
 	}
@@ -359,12 +356,12 @@ func (win *win) printDir(screen tcell.Screen, dir *dir, context *dirContext, dir
 	messageStyle := tcell.StyleDefault.Reverse(true)
 
 	if dir.noPerm {
-		win.print(screen, 2, 0, messageStyle, "permission denied")
+		win.print(ui.screen, 2, 0, messageStyle, "permission denied")
 		return
 	}
 	if (dir.loading && len(dir.files) == 0) || (dirStyle.role == Preview && dir.loading && gOpts.dirpreviews) {
 		if dirStyle.role != Preview || previewLoading {
-			win.print(screen, 2, 0, messageStyle, "loading...")
+			win.print(ui.screen, 2, 0, messageStyle, "loading...")
 		}
 		return
 	}
@@ -377,12 +374,12 @@ func (win *win) printDir(screen tcell.Screen, dir *dir, context *dirContext, dir
 				break
 			}
 
-			st = win.print(screen, 2, i, st, l)
+			st = win.print(ui.screen, 2, i, st, l)
 		}
 		return
 	}
 	if len(dir.files) == 0 {
-		win.print(screen, 2, 0, messageStyle, "empty")
+		win.print(ui.screen, 2, 0, messageStyle, "empty")
 		return
 	}
 
@@ -395,7 +392,7 @@ func (win *win) printDir(screen tcell.Screen, dir *dir, context *dirContext, dir
 
 	var lnwidth int
 
-	if gOpts.number || gOpts.relativenumber {
+	if dirStyle.role == Active && (gOpts.number || gOpts.relativenumber) {
 		lnwidth = 1
 		if gOpts.number && gOpts.relativenumber {
 			lnwidth++
@@ -426,18 +423,18 @@ func (win *win) printDir(screen tcell.Screen, dir *dir, context *dirContext, dir
 				}
 			}
 
-			win.print(screen, 0, i, tcell.StyleDefault, fmt.Sprintf(optionToFmtstr(gOpts.numberfmt), ln))
+			win.print(ui.screen, 0, i, tcell.StyleDefault, fmt.Sprintf(optionToFmtstr(gOpts.numberfmt), ln))
 		}
 
 		path := filepath.Join(dir.path, f.Name())
 
 		if _, ok := context.selections[path]; ok {
-			win.print(screen, lnwidth, i, st.Background(SelectionColor), " ")
+			win.print(ui.screen, lnwidth, i, parseEscapeSequence(gOpts.selectfmt), " ")
 		} else if cp, ok := context.saves[path]; ok {
 			if cp {
-				win.print(screen, lnwidth, i, st.Background(YankColor), " ")
+				win.print(ui.screen, lnwidth, i, parseEscapeSequence(gOpts.copyfmt), " ")
 			} else {
-				win.print(screen, lnwidth, i, st.Background(CutColor), " ")
+				win.print(ui.screen, lnwidth, i, parseEscapeSequence(gOpts.cutfmt), " ")
 			}
 		}
 
@@ -448,17 +445,21 @@ func (win *win) printDir(screen tcell.Screen, dir *dir, context *dirContext, dir
 			maxWidth -= 1
 		}
 
-		var s []rune
-
-		// leave space for displaying the tag
-		s = append(s, ' ')
-
-		if gOpts.icons {
-			s = append(s, []rune(dirStyle.icons.get(f))...)
-			s = append(s, ' ')
+		tag := " "
+		if val, ok := context.tags[path]; ok && len(val) > 0 {
+			tag = val
 		}
 
-		maxFilenameWidth := maxWidth - runeSliceWidth(s)
+		var icon []rune
+		var iconDef iconDef
+		if gOpts.icons {
+			iconDef = dirStyle.icons.get(f)
+			icon = append(icon, []rune(iconDef.icon)...)
+			icon = append(icon, ' ')
+		}
+
+		// subtract space for tag and icon
+		maxFilenameWidth := maxWidth - 1 - runeSliceWidth(icon)
 
 		info := fileInfo(f, dir)
 		showInfo := len(info) > 0 && 2*len(info) < maxWidth
@@ -474,39 +475,46 @@ func (win *win) printDir(screen tcell.Screen, dir *dir, context *dirContext, dir
 			filename = append(filename, []rune(gOpts.truncatechar)...)
 			filename = append(filename, lastPart...)
 		}
-		for i := runeSliceWidth(filename); i < maxFilenameWidth; i++ {
+		for j := runeSliceWidth(filename); j < maxFilenameWidth; j++ {
 			filename = append(filename, ' ')
 		}
-		s = append(s, filename...)
 
 		if showInfo {
-			s = append(s, []rune(info)...)
+			filename = append(filename, []rune(info)...)
 		}
 
-		ce := ""
 		if i == dir.pos {
+			var cursorFmt string
 			switch dirStyle.role {
 			case Active:
-				ce = gOpts.cursoractivefmt
+				cursorFmt = optionToFmtstr(gOpts.cursoractivefmt)
 			case Parent:
-				ce = gOpts.cursorparentfmt
+				cursorFmt = optionToFmtstr(gOpts.cursorparentfmt)
 			case Preview:
-				ce = gOpts.cursorpreviewfmt
+				cursorFmt = optionToFmtstr(gOpts.cursorpreviewfmt)
 			}
-		}
-		cursorescapefmt := optionToFmtstr(ce)
 
-		s = append(s, ' ')
-		styledFilename := fmt.Sprintf(cursorescapefmt, string(s))
-		win.print(screen, lnwidth+1, i, st, styledFilename)
+			// print tag separately as it can contain color escape sequences
+			win.print(ui.screen, lnwidth+1, i, st, fmt.Sprintf(cursorFmt, tag))
 
-		tag, ok := context.tags[path]
-		if ok {
-			if i == dir.pos {
-				win.print(screen, lnwidth+1, i, st, fmt.Sprintf(cursorescapefmt, tag))
-			} else {
-				win.print(screen, lnwidth+1, i, tcell.StyleDefault, fmt.Sprintf(optionToFmtstr(gOpts.tagfmt), tag))
+			line := append(icon, filename...)
+			line = append(line, ' ')
+			win.print(ui.screen, lnwidth+2, i, st, fmt.Sprintf(cursorFmt, string(line)))
+		} else {
+			if tag != " " {
+				tagStr := fmt.Sprintf(optionToFmtstr(gOpts.tagfmt), tag)
+				win.print(ui.screen, lnwidth+1, i, tcell.StyleDefault, tagStr)
 			}
+
+			if len(icon) > 0 {
+				iconStyle := st
+				if iconDef.hasStyle {
+					iconStyle = iconDef.style
+				}
+				win.print(ui.screen, lnwidth+2, i, iconStyle, string(icon))
+			}
+
+			win.print(ui.screen, lnwidth+2+runeSliceWidth(icon), i, st, string(filename))
 		}
 	}
 }
@@ -558,12 +566,14 @@ func getWins(screen tcell.Screen) []*win {
 
 type ui struct {
 	screen      tcell.Screen
+	sxScreen    sixelScreen
 	polling     bool
 	wins        []*win
 	promptWin   *win
 	msgWin      *win
 	menuWin     *win
 	msg         string
+	msgIsStat   bool
 	regPrev     *reg
 	dirPrev     *dir
 	exprChan    chan expr
@@ -593,6 +603,7 @@ func newUI(screen tcell.Screen) *ui {
 		promptWin:   newWin(wtot, 1, 0, 0),
 		msgWin:      newWin(wtot, 1, 0, htot-1),
 		menuWin:     newWin(wtot, 1, 0, htot-2),
+		msgIsStat:   true,
 		exprChan:    make(chan expr, 1000),
 		keyChan:     make(chan string, 1000),
 		tevChan:     make(chan tcell.Event, 1000),
@@ -600,6 +611,7 @@ func newUI(screen tcell.Screen) *ui {
 		styles:      parseStyles(),
 		icons:       parseIcons(),
 		currentFile: "",
+		sxScreen:    sixelScreen{},
 	}
 
 	go ui.pollEvents()
@@ -649,10 +661,11 @@ func (ui *ui) sort() {
 
 func (ui *ui) echo(msg string) {
 	ui.msg = msg
+	ui.msgIsStat = false
 }
 
 func (ui *ui) echomsg(msg string) {
-	ui.msg = msg
+	ui.echo(msg)
 	log.Print(msg)
 }
 
@@ -665,7 +678,7 @@ func optionToFmtstr(optstr string) string {
 }
 
 func (ui *ui) echoerr(msg string) {
-	ui.msg = fmt.Sprintf(optionToFmtstr(gOpts.errorfmt), msg)
+	ui.echo(fmt.Sprintf(optionToFmtstr(gOpts.errorfmt), msg))
 	log.Printf("error: %s", msg)
 }
 
@@ -679,6 +692,7 @@ type reg struct {
 	loadTime time.Time
 	path     string
 	lines    []string
+	sixel    *string
 }
 
 func (ui *ui) loadFile(app *app, volatile bool) {
@@ -721,6 +735,11 @@ func (ui *ui) loadFileInfo(nav *nav) {
 		return
 	}
 
+	if curr.err != nil {
+		ui.echoerrf("stat: %s", curr.err)
+		return
+	}
+
 	statfmt := strings.ReplaceAll(gOpts.statfmt, "|", "\x1f")
 	replace := func(s string, val string) {
 		if val == "" {
@@ -733,6 +752,7 @@ func (ui *ui) loadFileInfo(nav *nav) {
 	replace("%u", userName(curr))
 	replace("%g", groupName(curr))
 	replace("%s", humanize(curr.Size()))
+	replace("%S", fmt.Sprintf("%4s", humanize(curr.Size())))
 	replace("%t", curr.ModTime().Format(gOpts.timefmt))
 	replace("%l", curr.linkTarget)
 
@@ -743,7 +763,8 @@ func (ui *ui) loadFileInfo(nav *nav) {
 		}
 	}
 
-	ui.echo(fileInfo)
+	ui.msg = fileInfo
+	ui.msgIsStat = true
 }
 
 func (ui *ui) drawPromptLine(nav *nav) {
@@ -766,11 +787,11 @@ func (ui *ui) drawPromptLine(nav *nav) {
 
 	var prompt string
 
-	prompt = strings.Replace(gOpts.promptfmt, "%u", gUser.Username, -1)
-	prompt = strings.Replace(prompt, "%h", gHostname, -1)
-	prompt = strings.Replace(prompt, "%f", fname, -1)
+	prompt = strings.ReplaceAll(gOpts.promptfmt, "%u", gUser.Username)
+	prompt = strings.ReplaceAll(prompt, "%h", gHostname)
+	prompt = strings.ReplaceAll(prompt, "%f", fname)
 
-	if printLength(strings.Replace(strings.Replace(prompt, "%w", pwd, -1), "%d", pwd, -1)) > ui.promptWin.w {
+	if printLength(strings.ReplaceAll(strings.ReplaceAll(prompt, "%w", pwd), "%d", pwd)) > ui.promptWin.w {
 		names := strings.Split(pwd, sep)
 		for i := range names {
 			if names[i] == "" {
@@ -778,23 +799,23 @@ func (ui *ui) drawPromptLine(nav *nav) {
 			}
 			r, _ := utf8.DecodeRuneInString(names[i])
 			names[i] = string(r)
-			if printLength(strings.Replace(strings.Replace(prompt, "%w", strings.Join(names, sep), -1), "%d", strings.Join(names, sep), -1)) <= ui.promptWin.w {
+			if printLength(strings.ReplaceAll(strings.ReplaceAll(prompt, "%w", strings.Join(names, sep)), "%d", strings.Join(names, sep))) <= ui.promptWin.w {
 				break
 			}
 		}
 		pwd = strings.Join(names, sep)
 	}
 
-	prompt = strings.Replace(prompt, "%w", pwd, -1)
+	prompt = strings.ReplaceAll(prompt, "%w", pwd)
 	if !strings.HasSuffix(pwd, sep) {
 		pwd += sep
 	}
-	prompt = strings.Replace(prompt, "%d", pwd, -1)
+	prompt = strings.ReplaceAll(prompt, "%d", pwd)
 
 	if len(dir.filter) != 0 {
-		prompt = strings.Replace(prompt, "%F", fmt.Sprint(dir.filter), -1)
+		prompt = strings.ReplaceAll(prompt, "%F", fmt.Sprint(dir.filter))
 	} else {
-		prompt = strings.Replace(prompt, "%F", "", -1)
+		prompt = strings.ReplaceAll(prompt, "%F", "")
 	}
 
 	// spacer
@@ -802,7 +823,7 @@ func (ui *ui) drawPromptLine(nav *nav) {
 	if avail > 0 {
 		prompt = strings.Replace(prompt, "%S", strings.Repeat(" ", avail), 1)
 	}
-	prompt = strings.Replace(prompt, "%S", "", -1)
+	prompt = strings.ReplaceAll(prompt, "%S", "")
 
 	ui.promptWin.print(ui.screen, 0, 0, st, prompt)
 }
@@ -819,7 +840,7 @@ func formatRulerOpt(name string, val string) string {
 	return val
 }
 
-func (ui *ui) drawStatLine(nav *nav) {
+func (ui *ui) drawRuler(nav *nav) {
 	st := tcell.StyleDefault
 
 	dir := nav.currDir()
@@ -828,13 +849,12 @@ func (ui *ui) drawStatLine(nav *nav) {
 
 	tot := len(dir.files)
 	ind := min(dir.ind+1, tot)
+	hid := len(dir.allFiles) - tot
 	acc := string(ui.keyCount) + string(ui.keyAcc)
 
-	selection := []string{}
-
+	copy := 0
+	move := 0
 	if len(nav.saves) > 0 {
-		copy := 0
-		move := 0
 		for _, cp := range nav.saves {
 			if cp {
 				copy++
@@ -842,18 +862,9 @@ func (ui *ui) drawStatLine(nav *nav) {
 				move++
 			}
 		}
-		if copy > 0 {
-			selection = append(selection, fmt.Sprintf("\033[33;7m %d \033[0m", copy))
-		}
-		if move > 0 {
-			selection = append(selection, fmt.Sprintf("\033[31;7m %d \033[0m", move))
-		}
 	}
 
 	currSelections := nav.currSelections()
-	if len(currSelections) > 0 {
-		selection = append(selection, fmt.Sprintf("\033[35;7m %d \033[0m", len(currSelections)))
-	}
 
 	progress := []string{}
 
@@ -871,34 +882,49 @@ func (ui *ui) drawStatLine(nav *nav) {
 	}
 
 	opts := getOptsMap()
-	ruler := []string{}
-	for _, s := range gOpts.ruler {
+
+	rulerfmt := strings.ReplaceAll(gOpts.rulerfmt, "|", "\x1f")
+	rulerfmt = reRulerSub.ReplaceAllStringFunc(rulerfmt, func(s string) string {
+		var result string
 		switch s {
-		case "df":
-			df := diskFree(dir.path)
-			if df != "" {
-				ruler = append(ruler, df)
-			}
-		case "acc":
-			ruler = append(ruler, acc)
-		case "progress":
-			ruler = append(ruler, progress...)
-		case "selection":
-			ruler = append(ruler, selection...)
-		case "filter":
-			if len(dir.filter) != 0 {
-				ruler = append(ruler, "\033[34;7m F \033[0m")
-			}
-		case "ind":
-			ruler = append(ruler, fmt.Sprintf("%d/%d", ind, tot))
+		case "%a":
+			result = acc
+		case "%p":
+			result = strings.Join(progress, " ")
+		case "%m":
+			result = fmt.Sprintf("%.d", move)
+		case "%c":
+			result = fmt.Sprintf("%.d", copy)
+		case "%s":
+			result = fmt.Sprintf("%.d", len(currSelections))
+		case "%f":
+			result = strings.Join(dir.filter, " ")
+		case "%i":
+			result = fmt.Sprint(ind)
+		case "%t":
+			result = fmt.Sprint(tot)
+		case "%h":
+			result = fmt.Sprint(hid)
+		case "%d":
+			result = diskFree(dir.path)
 		default:
+			s = strings.TrimSuffix(strings.TrimPrefix(s, "%{"), "}")
 			if val, ok := opts[s]; ok {
-				ruler = append(ruler, formatRulerOpt(s, val))
+				result = formatRulerOpt(s, val)
 			}
 		}
+		if result == "" {
+			return "\x00"
+		}
+		return result
+	})
+	ruler := ""
+	for _, section := range strings.Split(rulerfmt, "\x1f") {
+		if !strings.Contains(section, "\x00") {
+			ruler += section
+		}
 	}
-
-	ui.msgWin.printRight(ui.screen, 0, st, strings.Join(ruler, "  "))
+	ui.msgWin.printRight(ui.screen, 0, st, ruler)
 }
 
 func (ui *ui) drawBox() {
@@ -916,10 +942,17 @@ func (ui *ui) drawBox() {
 		ui.screen.SetContent(w-1, i, tcell.RuneVLine, nil, st)
 	}
 
-	ui.screen.SetContent(0, 1, tcell.RuneULCorner, nil, st)
-	ui.screen.SetContent(w-1, 1, tcell.RuneURCorner, nil, st)
-	ui.screen.SetContent(0, h-2, tcell.RuneLLCorner, nil, st)
-	ui.screen.SetContent(w-1, h-2, tcell.RuneLRCorner, nil, st)
+	if gOpts.roundbox {
+		ui.screen.SetContent(0, 1, '╭', nil, st)
+		ui.screen.SetContent(w-1, 1, '╮', nil, st)
+		ui.screen.SetContent(0, h-2, '╰', nil, st)
+		ui.screen.SetContent(w-1, h-2, '╯', nil, st)
+	} else {
+		ui.screen.SetContent(0, 1, tcell.RuneULCorner, nil, st)
+		ui.screen.SetContent(w-1, 1, tcell.RuneURCorner, nil, st)
+		ui.screen.SetContent(0, h-2, tcell.RuneLLCorner, nil, st)
+		ui.screen.SetContent(w-1, h-2, tcell.RuneLRCorner, nil, st)
+	}
 
 	wacc := 0
 	for wind := 0; wind < len(ui.wins)-1; wind++ {
@@ -955,6 +988,7 @@ func (ui *ui) draw(nav *nav) {
 			ui.screen.SetContent(i, j, ' ', nil, st)
 		}
 	}
+	ui.sxScreen.sixel = nil
 
 	ui.drawPromptLine(nav)
 
@@ -968,7 +1002,7 @@ func (ui *ui) draw(nav *nav) {
 			role = Active
 		}
 		if dir := ui.dirOfWin(nav, i); dir != nil {
-			ui.wins[i].printDir(ui.screen, dir, &context,
+			ui.wins[i].printDir(ui, dir, &context,
 				&dirStyle{colors: ui.styles, icons: ui.icons, role: role},
 				nav.previewLoading)
 		}
@@ -976,27 +1010,21 @@ func (ui *ui) draw(nav *nav) {
 
 	switch ui.cmdPrefix {
 	case "":
-		ui.drawStatLine(nav)
+		ui.drawRuler(nav)
 		ui.screen.HideCursor()
 	case ">":
-		prefix := ui.cmdPrefix[:min(ui.msgWin.w-1, len(ui.cmdPrefix))]
-		pos := min(runeSliceWidth(ui.cmdAccLeft), ui.msgWin.w-len(prefix)-1)
-		left := ui.cmdAccLeft[runeSliceWidth(ui.cmdAccLeft)-pos:]
-		right := ui.cmdAccRight
-		ui.msgWin.printLine(ui.screen, 0, 0, st, prefix)
-		ui.msgWin.print(ui.screen, len(prefix), 0, st, ui.msg)
-		ui.msgWin.print(ui.screen, len(prefix)+printLength(ui.msg), 0, st, string(left))
-		ui.msgWin.print(ui.screen, len(prefix)+printLength(ui.msg)+runeSliceWidth(left), 0, st, string(right))
-		ui.screen.ShowCursor(ui.msgWin.x+len(prefix)+printLength(ui.msg)+runeSliceWidth(left), ui.msgWin.y)
+		maxWidth := ui.msgWin.w - 1 // leave space for cursor at the end
+		prefix := runeSliceWidthRange([]rune(ui.cmdPrefix), 0, maxWidth)
+		left := runeSliceWidthLastRange(ui.cmdAccLeft, maxWidth-runeSliceWidth(prefix)-printLength(ui.msg))
+		ui.msgWin.printLine(ui.screen, 0, 0, st, string(prefix)+ui.msg)
+		ui.msgWin.print(ui.screen, runeSliceWidth(prefix)+printLength(ui.msg), 0, st, string(left)+string(ui.cmdAccRight))
+		ui.screen.ShowCursor(ui.msgWin.x+runeSliceWidth(prefix)+printLength(ui.msg)+runeSliceWidth(left), ui.msgWin.y)
 	default:
-		prefix := ui.cmdPrefix[:min(ui.msgWin.w-1, len(ui.cmdPrefix))]
-		pos := min(runeSliceWidth(ui.cmdAccLeft), ui.msgWin.w-len(prefix)-1)
-		left := ui.cmdAccLeft[runeSliceWidth(ui.cmdAccLeft)-pos:]
-		right := ui.cmdAccRight
-		ui.msgWin.printLine(ui.screen, 0, 0, st, prefix)
-		ui.msgWin.print(ui.screen, len(prefix), 0, st, string(left))
-		ui.msgWin.print(ui.screen, len(prefix)+runeSliceWidth(left), 0, st, string(right))
-		ui.screen.ShowCursor(ui.msgWin.x+len(prefix)+runeSliceWidth(left), ui.msgWin.y)
+		maxWidth := ui.msgWin.w - 1 // leave space for cursor at the end
+		prefix := runeSliceWidthRange([]rune(ui.cmdPrefix), 0, maxWidth)
+		left := runeSliceWidthLastRange(ui.cmdAccLeft, maxWidth-runeSliceWidth(prefix))
+		ui.msgWin.printLine(ui.screen, 0, 0, st, string(prefix)+string(left)+string(ui.cmdAccRight))
+		ui.screen.ShowCursor(ui.msgWin.x+runeSliceWidth(prefix)+runeSliceWidth(left), ui.msgWin.y)
 	}
 
 	if gOpts.preview {
@@ -1005,11 +1033,11 @@ func (ui *ui) draw(nav *nav) {
 			preview := ui.wins[len(ui.wins)-1]
 
 			if curr.IsDir() {
-				preview.printDir(ui.screen, ui.dirPrev, &context,
+				preview.printDir(ui, ui.dirPrev, &context,
 					&dirStyle{colors: ui.styles, icons: ui.icons, role: Preview},
 					nav.previewLoading)
 			} else if curr.Mode().IsRegular() {
-				preview.printReg(ui.screen, ui.regPrev, nav.previewLoading)
+				preview.printReg(ui.screen, ui.regPrev, nav.previewLoading, &ui.sxScreen)
 			}
 		}
 	}
@@ -1039,6 +1067,10 @@ func (ui *ui) draw(nav *nav) {
 	}
 
 	ui.screen.Show()
+	if ui.menuBuf == nil && ui.cmdPrefix == "" && ui.sxScreen.sixel != nil {
+		ui.sxScreen.lastFile = ui.regPrev.path
+		ui.sxScreen.showSixels()
+	}
 }
 
 func findBinds(keys map[string]expr, prefix string) (binds map[string]expr, ok bool) {
@@ -1101,6 +1133,22 @@ func listJumps(jumps []string, ind int) *bytes.Buffer {
 		default:
 			fmt.Fprintf(t, "> %*d\t%s\n", maxlength, 0, jumps[i])
 		}
+	}
+	t.Flush()
+
+	return b
+}
+
+func listHistory(history []cmdItem) *bytes.Buffer {
+	t := new(tabwriter.Writer)
+	b := new(bytes.Buffer)
+
+	maxlength := len(strconv.Itoa(len(history)))
+
+	t.Init(b, 0, gOpts.tabstop, 2, '\t', 0)
+	fmt.Fprintln(t, "number\tcommand")
+	for i, cmd := range history {
+		fmt.Fprintf(t, "%*d\t%s%s\n", maxlength, i+1, cmd.prefix, cmd.value)
 	}
 	t.Flush()
 
@@ -1369,6 +1417,12 @@ func (ui *ui) readNormalEvent(ev tcell.Event, nav *nav) expr {
 		log.Printf("Got EventError: '%s' at %s", tev.Error(), tev.When())
 	case *tcell.EventInterrupt:
 		log.Printf("Got EventInterrupt: at %s", tev.When())
+	case *tcell.EventFocus:
+		if tev.Focused {
+			return &callExpr{"on-focus-gained", nil, 1}
+		} else {
+			return &callExpr{"on-focus-lost", nil, 1}
+		}
 	}
 	return nil
 }
@@ -1429,6 +1483,43 @@ func (ui *ui) resume() error {
 	return err
 }
 
+func (ui *ui) exportMode() {
+	getMode := func() string {
+		if strings.HasPrefix(ui.cmdPrefix, "delete") {
+			return "delete"
+		}
+
+		if strings.HasPrefix(ui.cmdPrefix, "replace") || strings.HasPrefix(ui.cmdPrefix, "create") {
+			return "rename"
+		}
+
+		switch ui.cmdPrefix {
+		case "filter: ":
+			return "filter"
+		case "find: ", "find-back: ":
+			return "find"
+		case "mark-save: ", "mark-load: ", "mark-remove: ":
+			return "mark"
+		case "rename: ":
+			return "rename"
+		case "/", "?":
+			return "search"
+		case ":":
+			return "command"
+		case "$", "%", "!", "&":
+			return "shell"
+		case ">":
+			return "pipe"
+		case "":
+			return "normal"
+		default:
+			return "unknown"
+		}
+	}
+
+	os.Setenv("lf_mode", getMode())
+}
+
 func (ui *ui) exportSizes() {
 	w, h := ui.screen.Size()
 	os.Setenv("lf_width", strconv.Itoa(w))
@@ -1436,8 +1527,8 @@ func (ui *ui) exportSizes() {
 }
 
 func anyKey() {
-	fmt.Print(gOpts.waitmsg)
-	defer fmt.Print("\n")
+	fmt.Fprint(os.Stderr, gOpts.waitmsg)
+	defer fmt.Fprint(os.Stderr, "\n")
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		panic(err)

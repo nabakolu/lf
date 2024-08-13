@@ -33,6 +33,8 @@ type app struct {
 	menuCompActive bool
 	menuComps      []string
 	menuCompInd    int
+	selectionOut   []string
+	watch          *watch
 }
 
 func newApp(ui *ui, nav *nav) *app {
@@ -43,18 +45,20 @@ func newApp(ui *ui, nav *nav) *app {
 		nav:      nav,
 		ticker:   new(time.Ticker),
 		quitChan: quitChan,
+		watch:    newWatch(nav.dirChan, nav.fileChan, nav.delChan),
 	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM)
 	go func() {
-		switch <-sigChan {
-		case os.Interrupt:
-			return
-		case syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM:
-			app.quit()
-			os.Exit(3)
-			return
+		for {
+			switch <-sigChan {
+			case os.Interrupt:
+			case syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM:
+				app.quit()
+				os.Exit(3)
+				return
+			}
 		}
 	}()
 
@@ -62,6 +66,8 @@ func newApp(ui *ui, nav *nav) *app {
 }
 
 func (app *app) quit() {
+	onQuit(app)
+
 	if gOpts.history {
 		if err := app.writeHistory(); err != nil {
 			log.Printf("writing history file: %s", err)
@@ -163,6 +169,7 @@ func saveFiles(list []string, cp bool) error {
 		fmt.Fprintln(files, f)
 	}
 
+	files.Sync()
 	return nil
 }
 
@@ -227,7 +234,7 @@ func (app *app) writeHistory() error {
 	}
 
 	for _, cmd := range app.cmdHistory {
-		_, err = f.WriteString(fmt.Sprintf("%s %s\n", cmd.prefix, cmd.value))
+		_, err = fmt.Fprintf(f, "%s %s\n", cmd.prefix, cmd.value)
 		if err != nil {
 			return fmt.Errorf("writing history file: %s", err)
 		}
@@ -317,10 +324,6 @@ func (app *app) loop() {
 				continue
 			}
 
-			if cmd, ok := gOpts.cmds["on-quit"]; ok {
-				cmd.eval(app, nil)
-			}
-
 			app.quit()
 
 			app.nav.previewChan <- ""
@@ -328,24 +331,11 @@ func (app *app) loop() {
 
 			log.Print("bye!")
 
-			if gLastDirPath != "" {
-				f, err := os.Create(gLastDirPath)
-				if err != nil {
-					log.Printf("opening last dir file: %s", err)
-				}
-				defer f.Close()
-
-				_, err = f.WriteString(app.nav.currDir().path)
-				if err != nil {
-					log.Printf("writing last dir file: %s", err)
-				}
-			}
-
 			return
 		case n := <-app.nav.copyBytesChan:
 			app.nav.copyBytes += n
-			// n is usually 4096B so update roughly per 4096B x 1024 = 4MB copied
-			if app.nav.copyUpdate++; app.nav.copyUpdate >= 1024 {
+			// n is usually 32*1024B (default io.Copy() buffer) so update roughly per 32KB x 128 = 4MB copied
+			if app.nav.copyUpdate++; app.nav.copyUpdate >= 128 {
 				app.nav.copyUpdate = 0
 				app.ui.draw(app.nav)
 			}
@@ -389,18 +379,22 @@ func (app *app) loop() {
 			}
 			app.ui.draw(app.nav)
 		case d := <-app.nav.dirChan:
-
-			app.nav.checkDir(d)
-
 			if gOpts.dircache {
 				prev, ok := app.nav.dirCache[d.path]
 				if ok {
 					d.ind = prev.ind
 					d.pos = prev.pos
+					d.filter = prev.filter
+					d.sort()
 					d.sel(prev.name(), app.nav.height)
 				}
 
 				app.nav.dirCache[d.path] = d
+			}
+
+			var oldCurrPath string
+			if curr, err := app.nav.currFile(); err == nil {
+				oldCurrPath = curr.path
 			}
 
 			for i := range app.nav.dirs {
@@ -413,9 +407,9 @@ func (app *app) loop() {
 
 			curr, err := app.nav.currFile()
 			if err == nil {
-				if d.path == app.nav.currDir().path {
+				if curr.path != oldCurrPath {
 					app.ui.loadFile(app, true)
-					if app.ui.msg == "" {
+					if app.ui.msgIsStat {
 						app.ui.loadFileInfo(app.nav)
 					}
 				}
@@ -424,10 +418,10 @@ func (app *app) loop() {
 				}
 			}
 
+			app.setWatchPaths()
+
 			app.ui.draw(app.nav)
 		case r := <-app.nav.regChan:
-			app.nav.checkReg(r)
-
 			app.nav.regCache[r.path] = r
 
 			curr, err := app.nav.currFile()
@@ -438,6 +432,37 @@ func (app *app) loop() {
 			}
 
 			app.ui.draw(app.nav)
+		case f := <-app.nav.fileChan:
+			dirs := app.nav.dirs
+			if app.ui.dirPrev != nil {
+				dirs = append(dirs, app.ui.dirPrev)
+			}
+
+			for _, dir := range dirs {
+				if dir.path != filepath.Dir(f.path) {
+					continue
+				}
+
+				for i := range dir.allFiles {
+					if dir.allFiles[i].path == f.path {
+						dir.allFiles[i] = f
+						break
+					}
+				}
+
+				name := dir.name()
+				dir.sort()
+				dir.sel(name, app.nav.height)
+			}
+
+			app.ui.loadFile(app, false)
+			if app.ui.msgIsStat {
+				app.ui.loadFileInfo(app.nav)
+			}
+			app.ui.draw(app.nav)
+		case path := <-app.nav.delChan:
+			delete(app.nav.dirCache, path)
+			delete(app.nav.regCache, path)
 		case ev := <-app.ui.evChan:
 			e := app.ui.readEvent(ev, app.nav)
 			if e == nil {
@@ -467,7 +492,6 @@ func (app *app) loop() {
 		case <-app.ticker.C:
 			app.nav.renew()
 			app.ui.loadFile(app, false)
-			app.ui.draw(app.nav)
 		case <-app.nav.previewTimer.C:
 			app.nav.previewLoading = true
 			app.ui.draw(app.nav)
@@ -510,7 +534,16 @@ func (app *app) runCmdSync(cmd *exec.Cmd, pause_after bool) {
 func (app *app) runShell(s string, args []string, prefix string) {
 	app.nav.exportFiles()
 	app.ui.exportSizes()
+	app.ui.exportMode()
 	exportOpts()
+
+	gState.mutex.Lock()
+	gState.data["maps"] = listBinds(gOpts.keys).String()
+	gState.data["cmaps"] = listBinds(gOpts.cmdkeys).String()
+	gState.data["cmds"] = listCmds().String()
+	gState.data["jumps"] = listJumps(app.nav.jumpList, app.nav.jumpListInd).String()
+	gState.data["history"] = listHistory(app.cmdHistory).String()
+	gState.mutex.Unlock()
 
 	cmd := shellCommand(s, args)
 
@@ -519,7 +552,7 @@ func (app *app) runShell(s string, args []string, prefix string) {
 	switch prefix {
 	case "$", "!":
 		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
+		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr
 
 		app.runCmdSync(cmd, prefix == "!")
@@ -594,19 +627,23 @@ func (app *app) runShell(s string, args []string, prefix string) {
 			app.ui.exprChan <- &callExpr{"load", nil, 1}
 		}()
 	}
-
 }
 
-func (app *app) runPagerOn(stdin io.Reader) {
-	app.nav.exportFiles()
-	app.ui.exportSizes()
-	exportOpts()
+func (app *app) setWatchPaths() {
+	if !gOpts.watch || len(app.nav.dirs) == 0 {
+		return
+	}
 
-	cmd := shellCommand(envPager, nil)
+	paths := make(map[string]bool)
+	for _, dir := range app.nav.dirs {
+		paths[dir.path] = true
+	}
 
-	cmd.Stdin = stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	for _, file := range app.nav.currDir().allFiles {
+		if file.IsDir() {
+			paths[file.path] = true
+		}
+	}
 
-	app.runCmdSync(cmd, false)
+	app.watch.set(paths)
 }

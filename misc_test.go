@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestIsRoot(t *testing.T) {
@@ -216,23 +217,27 @@ func TestSplitWord(t *testing.T) {
 	}
 }
 
-func TestReadPairs(t *testing.T) {
+func TestReadArrays(t *testing.T) {
 	tests := []struct {
-		s   string
-		exp [][]string
+		s        string
+		min_cols int
+		max_cols int
+		exp      [][]string
 	}{
-		{"foo bar", [][]string{{"foo", "bar"}}},
-		{"foo bar ", [][]string{{"foo", "bar"}}},
-		{" foo bar", [][]string{{"foo", "bar"}}},
-		{" foo bar ", [][]string{{"foo", "bar"}}},
-		{"foo bar#baz", [][]string{{"foo", "bar"}}},
-		{"foo bar #baz", [][]string{{"foo", "bar"}}},
-		{`'foo#baz' bar`, [][]string{{"foo#baz", "bar"}}},
-		{`"foo#baz" bar`, [][]string{{"foo#baz", "bar"}}},
+		{"foo bar", 2, 2, [][]string{{"foo", "bar"}}},
+		{"foo bar ", 2, 2, [][]string{{"foo", "bar"}}},
+		{" foo bar", 2, 2, [][]string{{"foo", "bar"}}},
+		{" foo bar ", 2, 2, [][]string{{"foo", "bar"}}},
+		{"foo bar#baz", 2, 2, [][]string{{"foo", "bar"}}},
+		{"foo bar #baz", 2, 2, [][]string{{"foo", "bar"}}},
+		{`'foo#baz' bar`, 2, 2, [][]string{{"foo#baz", "bar"}}},
+		{`"foo#baz" bar`, 2, 2, [][]string{{"foo#baz", "bar"}}},
+		{"foo bar baz", 3, 3, [][]string{{"foo", "bar", "baz"}}},
+		{`"foo bar baz"`, 1, 1, [][]string{{"foo bar baz"}}},
 	}
 
 	for _, test := range tests {
-		if got, _ := readPairs(strings.NewReader(test.s)); !reflect.DeepEqual(got, test.exp) {
+		if got, _ := readArrays(strings.NewReader(test.s), test.min_cols, test.max_cols); !reflect.DeepEqual(got, test.exp) {
 			t.Errorf("at input '%v' expected '%v' but got '%v'", test.s, test.exp, got)
 		}
 	}
@@ -291,5 +296,42 @@ func TestNaturalLess(t *testing.T) {
 		if got := naturalLess(test.s1, test.s2); got != test.exp {
 			t.Errorf("at input '%s' and '%s' expected '%t' but got '%t'", test.s1, test.s2, test.exp, got)
 		}
+	}
+}
+
+type fakeFileInfo struct {
+	name  string
+	isDir bool
+}
+
+func (fileinfo fakeFileInfo) Name() string       { return fileinfo.name }
+func (fileinfo fakeFileInfo) Size() int64        { return 0 }
+func (fileinfo fakeFileInfo) Mode() os.FileMode  { return os.FileMode(0o000) }
+func (fileinfo fakeFileInfo) ModTime() time.Time { return time.Unix(0, 0) }
+func (fileinfo fakeFileInfo) IsDir() bool        { return fileinfo.isDir }
+func (fileinfo fakeFileInfo) Sys() any           { return nil }
+
+func TestGetFileExtension(t *testing.T) {
+	tests := []struct {
+		name              string
+		fileName          string
+		isDir             bool
+		expectedExtension string
+	}{
+		{"normal file", "file.txt", false, ".txt"},
+		{"file without extension", "file", false, ""},
+		{"hidden file", ".gitignore", false, ""},
+		{"hidden file with extension", ".file.txt", false, ".txt"},
+		{"directory", "dir", true, ""},
+		{"hidden directory", ".git", true, ""},
+		{"directory with dot", "profile.d", true, ""},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := getFileExtension(fakeFileInfo{test.fileName, test.isDir}); got != test.expectedExtension {
+				t.Errorf("at input '%s' expected '%s' but got '%s'", test.fileName, test.expectedExtension, got)
+			}
+		})
 	}
 }

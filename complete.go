@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -11,12 +12,10 @@ import (
 var (
 	gCmdWords = []string{
 		"set",
+		"setlocal",
 		"map",
-		"maps",
 		"cmap",
-		"cmaps",
 		"cmd",
-		"cmds",
 		"quit",
 		"up",
 		"half-up",
@@ -30,7 +29,6 @@ var (
 		"open",
 		"jump-next",
 		"jump-prev",
-		"jumps",
 		"top",
 		"bottom",
 		"high",
@@ -106,122 +104,51 @@ var (
 		"cmd-word",
 		"cmd-word-back",
 		"cmd-delete-word",
+		"cmd-delete-word-back",
 		"cmd-capitalize-word",
 		"cmd-uppercase-word",
 		"cmd-lowercase-word",
 	}
 
-	gOptWords = []string{
-		"anchorfind",
-		"noanchorfind",
-		"anchorfind!",
-		"autoquit",
-		"noautoquit",
-		"autoquit!",
-		"borderfmt",
-		"cursoractivefmt",
-		"cursorparentfmt",
-		"cursorpreviewfmt",
-		"dircache",
-		"nodircache",
-		"dircache!",
-		"dircounts",
-		"nodircounts",
-		"dircounts!",
-		"dirfirst",
-		"nodirfirst",
-		"dirfirst!",
-		"dironly",
-		"nodironly",
-		"dironly!",
-		"dirpreviews",
-		"nodirpreviews",
-		"dirpreviews!",
-		"drawbox",
-		"nodrawbox",
-		"drawbox!",
-		"dupfilefmt",
-		"globsearch",
-		"noglobsearch",
-		"globsearch!",
-		"hidden",
-		"nohidden",
-		"hidden!",
-		"icons",
-		"noicons",
-		"icons!",
-		"ignorecase",
-		"noignorecase",
-		"ignorecase!",
-		"ignoredia",
-		"noignoredia",
-		"ignoredia!",
-		"incsearch",
-		"noincsearch",
-		"incsearch!",
-		"incfilter",
-		"noincfilter",
-		"incfilter!",
-		"mouse",
-		"nomouse",
-		"mouse!",
-		"number",
-		"nonumber",
-		"number!",
-		"preview",
-		"nopreview",
-		"preview!",
-		"relativenumber",
-		"norelativenumber",
-		"relativenumber!",
-		"reverse",
-		"noreverse",
-		"reverse!",
-		"ruler",
-		"preserve",
-		"smartcase",
-		"nosmartcase",
-		"smartcase!",
-		"smartdia",
-		"nosmartdia",
-		"smartdia!",
-		"waitmsg",
-		"wrapscan",
-		"nowrapscan",
-		"wrapscan!",
-		"wrapscroll",
-		"nowrapscroll",
-		"wrapscroll!",
-		"findlen",
-		"period",
-		"scrolloff",
-		"tabstop",
-		"errorfmt",
-		"filesep",
-		"hiddenfiles",
-		"history",
-		"ifs",
-		"info",
-		"numberfmt",
-		"previewer",
-		"cleaner",
-		"promptfmt",
-		"ratios",
-		"selmode",
-		"shell",
-		"shellflag",
-		"shellopts",
-		"sortby",
-		"statfmt",
-		"timefmt",
-		"tempmarks",
-		"tagfmt",
-		"infotimefmtnew",
-		"infotimefmtold",
-		"truncatechar",
-		"truncatepct",
-	}
+	gOptWords      = getOptWords(gOpts)
+	gLocalOptWords = getLocalOptWords(gLocalOpts)
 )
+
+func getOptWords(opts any) (optWords []string) {
+	t := reflect.TypeOf(opts)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		switch field.Type.Kind() {
+		case reflect.Map:
+			continue
+		case reflect.Bool:
+			name := field.Name
+			optWords = append(optWords, name, "no"+name, name+"!")
+		default:
+			optWords = append(optWords, field.Name)
+		}
+	}
+	sort.Strings(optWords)
+	return
+}
+
+func getLocalOptWords(localOpts any) (localOptWords []string) {
+	t := reflect.TypeOf(localOpts)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		name := strings.TrimSuffix(field.Name, "s")
+		if field.Type.Kind() != reflect.Map {
+			continue
+		}
+		if field.Type.Elem().Kind() == reflect.Bool {
+			localOptWords = append(localOptWords, name, "no"+name, name+"!")
+		} else {
+			localOptWords = append(localOptWords, name)
+		}
+	}
+	sort.Strings(localOptWords)
+	return
+}
 
 func matchLongest(s1, s2 []rune) []rune {
 	i := 0
@@ -407,6 +334,9 @@ func completeCmd(acc []rune) (matches []string, longestAcc []rune) {
 		}
 	case 3:
 		switch f[0] {
+		case "setlocal":
+			matches, longest = matchWord(f[2], gLocalOptWords)
+			longestAcc = append(acc[:len(acc)-len([]rune(f[len(f)-1]))], longest...)
 		case "map", "cmap":
 			matches, longest = matchCmd(f[2])
 			longestAcc = append(acc[:len(acc)-len([]rune(f[len(f)-1]))], longest...)
@@ -416,7 +346,7 @@ func completeCmd(acc []rune) (matches []string, longestAcc []rune) {
 		}
 	default:
 		switch f[0] {
-		case "set", "map", "cmap", "cmd":
+		case "set", "setlocal", "map", "cmap", "cmd":
 			longestAcc = acc
 		default:
 			matches, longest = matchFile(f[len(f)-1])

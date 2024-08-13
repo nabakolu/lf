@@ -9,10 +9,16 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"runtime/pprof"
 	"strconv"
 	"strings"
+
+	_ "embed"
 )
+
+//go:embed doc.txt
+var genDocString string
 
 var (
 	envPath  = os.Getenv("PATH")
@@ -22,18 +28,20 @@ var (
 type arrayFlag []string
 
 var (
-	gSingleMode    bool
-	gClientID      int
-	gHostname      string
-	gLastDirPath   string
-	gSelectionPath string
-	gSocketProt    string
-	gSocketPath    string
-	gLogPath       string
-	gSelect        string
-	gConfigPath    string
-	gCommands      arrayFlag
-	gVersion       string
+	gSingleMode     bool
+	gPrintLastDir   bool
+	gPrintSelection bool
+	gClientID       int
+	gHostname       string
+	gLastDirPath    string
+	gSelectionPath  string
+	gSocketProt     string
+	gSocketPath     string
+	gLogPath        string
+	gSelect         string
+	gConfigPath     string
+	gCommands       arrayFlag
+	gVersion        string
 )
 
 func (a *arrayFlag) Set(v string) error {
@@ -129,32 +137,7 @@ func getOptsMap() map[string]string {
 			continue
 		}
 
-		// Get string representation of the value
-		if name == "lf_sortType" {
-			var sortby string
-
-			switch gOpts.sortType.method {
-			case naturalSort:
-				sortby = "natural"
-			case nameSort:
-				sortby = "name"
-			case sizeSort:
-				sortby = "size"
-			case timeSort:
-				sortby = "time"
-			case ctimeSort:
-				sortby = "ctime"
-			case atimeSort:
-				sortby = "atime"
-			case extSort:
-				sortby = "ext"
-			}
-
-			opts["lf_sortby"] = sortby
-			opts["lf_reverse"] = strconv.FormatBool(gOpts.sortType.option&reverseSort != 0)
-			opts["lf_hidden"] = strconv.FormatBool(gOpts.sortType.option&hiddenSort != 0)
-			opts["lf_dirfirst"] = strconv.FormatBool(gOpts.sortType.option&dirfirstSort != 0)
-		} else if name == "lf_user" {
+		if name == "lf_user" {
 			// set each user option
 			for key, value := range gOpts.user {
 				opts[name+"_"+key] = value
@@ -195,6 +178,37 @@ func checkServer() {
 	}
 }
 
+func printVersion() {
+	if gVersion != "" {
+		fmt.Println(gVersion)
+		return
+	}
+
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+
+	var vcsRevision, vcsTime, vcsModified string
+	for _, setting := range buildInfo.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			vcsRevision = setting.Value
+		case "vcs.time":
+			vcsTime = setting.Value
+		case "vcs.modified":
+			if setting.Value == "true" {
+				vcsModified = " (dirty)"
+			}
+		}
+	}
+
+	if vcsRevision != "" {
+		fmt.Printf("Built at commit: %s%s %s\n", vcsRevision, vcsModified, vcsTime)
+	}
+	fmt.Printf("Go version: %s\n", buildInfo.GoVersion)
+}
+
 func main() {
 	flag.Usage = func() {
 		f := flag.CommandLine.Output()
@@ -227,6 +241,16 @@ func main() {
 		"single",
 		false,
 		"start a client without server")
+
+	printLastDir := flag.Bool(
+		"print-last-dir",
+		false,
+		"print the last dir to stdout on exit (to use for cd)")
+
+	printSelection := flag.Bool(
+		"print-selection",
+		false,
+		"print the selected files to stdout on open (to use as open file dialog)")
 
 	remoteCmd := flag.String(
 		"remote",
@@ -287,7 +311,7 @@ func main() {
 	case *showDoc:
 		fmt.Print(genDocString)
 	case *showVersion:
-		fmt.Println(gVersion)
+		printVersion()
 	case *remoteCmd != "":
 		if err := remote(*remoteCmd); err != nil {
 			log.Fatalf("remote command: %s", err)
@@ -305,6 +329,8 @@ func main() {
 		serve()
 	default:
 		gSingleMode = *singleMode
+		gPrintLastDir = *printLastDir
+		gPrintSelection = *printSelection
 
 		if !gSingleMode {
 			checkServer()

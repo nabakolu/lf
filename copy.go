@@ -11,6 +11,24 @@ import (
 	"github.com/djherbis/times"
 )
 
+type ProgressWriter struct {
+	writer io.Writer
+	nums   chan<- int64
+}
+
+func NewProgressWriter(writer io.Writer, nums chan<- int64) *ProgressWriter {
+	return &ProgressWriter{
+		writer: writer,
+		nums:   nums,
+	}
+}
+
+func (progressWriter *ProgressWriter) Write(b []byte) (int, error) {
+	n, err := progressWriter.writer.Write(b)
+	progressWriter.nums <- int64(n)
+	return n, err
+}
+
 func copySize(srcs []string) (int64, error) {
 	var total int64
 
@@ -20,14 +38,13 @@ func copySize(srcs []string) (int64, error) {
 			return total, fmt.Errorf("src does not exist: %q", src)
 		}
 
-		err = filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		err = filepath.Walk(src, func(_ string, info os.FileInfo, err error) error {
 			if err != nil {
 				return fmt.Errorf("walk: %s", err)
 			}
 			total += info.Size()
 			return nil
 		})
-
 		if err != nil {
 			return total, err
 		}
@@ -36,10 +53,10 @@ func copySize(srcs []string) (int64, error) {
 	return total, nil
 }
 
-func copyFile(src, dst string, info os.FileInfo, nums chan int64) error {
-	var dst_mode os.FileMode = 0666
+func copyFile(src, dst string, preserve []string, info os.FileInfo, nums chan int64) error {
+	var dst_mode os.FileMode = 0o666
 	preserve_timestamps := false
-	for _, s := range gOpts.preserve {
+	for _, s := range preserve {
 		switch s {
 		case "timestamps":
 			preserve_timestamps = true
@@ -47,8 +64,6 @@ func copyFile(src, dst string, info os.FileInfo, nums chan int64) error {
 			dst_mode = info.Mode()
 		}
 	}
-
-	buf := make([]byte, 4096)
 
 	r, err := os.Open(src)
 	if err != nil {
@@ -61,23 +76,11 @@ func copyFile(src, dst string, info os.FileInfo, nums chan int64) error {
 		return err
 	}
 
-	for {
-		n, err := r.Read(buf)
-		if err != nil && err != io.EOF {
-			w.Close()
-			os.Remove(dst)
-			return err
-		}
-
-		if n == 0 {
-			break
-		}
-
-		if _, err := w.Write(buf[:n]); err != nil {
-			return err
-		}
-
-		nums <- int64(n)
+	_, err = io.Copy(NewProgressWriter(w, nums), r)
+	if err != nil {
+		w.Close()
+		os.Remove(dst)
+		return err
 	}
 
 	if err := w.Close(); err != nil {
@@ -98,7 +101,7 @@ func copyFile(src, dst string, info os.FileInfo, nums chan int64) error {
 	return nil
 }
 
-func copyAll(srcs []string, dstDir string) (nums chan int64, errs chan error) {
+func copyAll(srcs []string, dstDir string, preserve []string) (nums chan int64, errs chan error) {
 	nums = make(chan int64, 1024)
 	errs = make(chan error, 1024)
 
@@ -107,10 +110,10 @@ func copyAll(srcs []string, dstDir string) (nums chan int64, errs chan error) {
 			file := filepath.Base(src)
 			dst := filepath.Join(dstDir, file)
 
-			_, err := os.Lstat(dst)
+			lstat, err := os.Lstat(dst)
 			if !os.IsNotExist(err) {
-				ext := filepath.Ext(file)
-				basename := filepath.Base(file[:len(file)-len(ext)])
+				ext := getFileExtension(lstat)
+				basename := file[:len(file)-len(ext)]
 				var newPath string
 				for i := 1; !os.IsNotExist(err); i++ {
 					file = strings.ReplaceAll(gOpts.dupfilefmt, "%f", basename+ext)
@@ -149,7 +152,7 @@ func copyAll(srcs []string, dstDir string) (nums chan int64, errs chan error) {
 					}
 					nums <- info.Size()
 				} else {
-					if err := copyFile(path, newPath, info, nums); err != nil {
+					if err := copyFile(path, newPath, preserve, info, nums); err != nil {
 						errs <- fmt.Errorf("copy: %s", err)
 					}
 				}

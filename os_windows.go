@@ -8,6 +8,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"golang.org/x/sys/windows"
 )
@@ -22,10 +23,11 @@ var (
 var envPathExt = os.Getenv("PATHEXT")
 
 var (
-	gDefaultShell      = "cmd"
-	gDefaultShellFlag  = "/c"
-	gDefaultSocketProt = "tcp"
-	gDefaultSocketPath = "127.0.0.1:12345"
+	gDefaultShell       = "cmd"
+	gDefaultShellFlag   = "/c"
+	gDefaultSocketProt  = "unix"
+	gDefaultSocketPath  string
+	gDefaultHiddenFiles []string
 )
 
 var (
@@ -59,14 +61,20 @@ func init() {
 		envShell = "cmd"
 	}
 
-	u, err := user.Current()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		log.Printf("user: %s", err)
+		panic(err)
 	}
-	gUser = u
 
-	// remove domain prefix
-	gUser.Username = strings.Split(gUser.Username, `\`)[1]
+	username := os.Getenv("USERNAME")
+	if username == "" {
+		panic("$USERNAME variable is empty or not set")
+	}
+
+	gUser = &user.User{
+		HomeDir:  homeDir,
+		Username: username,
+	}
 
 	data := os.Getenv("LF_CONFIG_HOME")
 	if data == "" {
@@ -92,6 +100,16 @@ func init() {
 	gMarksPath = filepath.Join(data, "lf", "marks")
 	gTagsPath = filepath.Join(data, "lf", "tags")
 	gHistoryPath = filepath.Join(data, "lf", "history")
+
+	socket, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		gDefaultSocketProt = "tcp"
+		gDefaultSocketPath = "127.0.0.1:12345"
+	} else {
+		runtime := os.TempDir()
+		gDefaultSocketPath = filepath.Join(runtime, fmt.Sprintf("lf.%s.sock", gUser.Username))
+		syscall.Close(socket)
+	}
 }
 
 func detachedCommand(name string, arg ...string) *exec.Cmd {
@@ -136,6 +154,10 @@ func setDefaults() {
 
 	gOpts.cmds["doc"] = &execExpr{"!", "%lf% -doc | %PAGER%"}
 	gOpts.keys["<f-1>"] = &callExpr{"doc", nil, 1}
+
+	gOpts.cmds["maps"] = &execExpr{"!", `%lf% -remote "query %id% maps" | %PAGER%`}
+	gOpts.cmds["cmaps"] = &execExpr{"!", `%lf% -remote "query %id% cmaps" | %PAGER%`}
+	gOpts.cmds["cmds"] = &execExpr{"!", `%lf% -remote "query %id% cmds" | %PAGER%`}
 }
 
 func setUserUmask() {}
@@ -160,7 +182,22 @@ func isHidden(f os.FileInfo, path string, hiddenfiles []string) bool {
 	if err != nil {
 		return false
 	}
-	return attrs&windows.FILE_ATTRIBUTE_HIDDEN != 0
+
+	if attrs&windows.FILE_ATTRIBUTE_HIDDEN != 0 {
+		return true
+	}
+
+	hidden := false
+	for _, pattern := range hiddenfiles {
+		matched := matchPattern(strings.TrimPrefix(pattern, "!"), f.Name(), path)
+		if strings.HasPrefix(pattern, "!") && matched {
+			hidden = false
+		} else if matched {
+			hidden = true
+		}
+	}
+
+	return hidden
 }
 
 func userName(f os.FileInfo) string {
@@ -180,5 +217,9 @@ func errCrossDevice(err error) bool {
 }
 
 func quoteString(s string) string {
-	return fmt.Sprintf(`"%s"`, s)
+	// Windows CMD requires special handling to deal with quoted arguments
+	if strings.ToLower(gOpts.shell) == "cmd" {
+		return fmt.Sprintf(`"%s"`, s)
+	}
+	return s
 }
