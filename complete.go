@@ -26,6 +26,7 @@ var (
 		"page-down",
 		"scroll-down",
 		"updir",
+		"selection-quit",
 		"open",
 		"jump-next",
 		"jump-prev",

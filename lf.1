@@ -102,6 +102,7 @@ mark-load      (modal)   (default \[dq]\[aq]\[dq])
 mark-remove    (modal)   (default \[aq]\[dq]\[aq])
 tag
 tag-toggle               (default \[aq]t\[aq])
+selection-quit
 \f[R]
 .fi
 .PP
@@ -624,6 +625,10 @@ with \f[C]tag-toggle\f[R] (i.e.
 .PP
 Tag a file with \f[C]*\f[R] or a single width character given in the
 argument if the file is untagged, otherwise remove the tag.
+.SS selection-quit
+.PP
+Print the selection to stdout if --print-selection is set,
+or write it to the specified file, if --selection-path is set.
 .SH COMMAND LINE COMMANDS
 .PP
 The prompt character specifies which of the several command-line modes
