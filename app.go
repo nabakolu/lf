@@ -183,6 +183,10 @@ func saveFiles(clipboard clipboard) error {
 	}
 
 	for _, path := range clipboard.paths {
+		if strings.ContainsAny(path, "\n\r") {
+			log.Printf("clipboard: skipping path with newline: %q", path)
+			continue
+		}
 		if _, err := fmt.Fprintln(files, path); err != nil {
 			return fmt.Errorf("write path to file: %w", err)
 		}
@@ -268,7 +272,7 @@ func (app *app) loop() {
 		serverChan = readExpr()
 	}
 
-	app.ui.readExpr()
+	go app.ui.readEvents()
 
 	if gConfigPath != "" {
 		if _, err := os.Stat(gConfigPath); !os.IsNotExist(err) {
@@ -296,7 +300,6 @@ func (app *app) loop() {
 		}
 	}
 
-	app.nav.loadDirs()
 	app.nav.addJumpList()
 
 	if gSelect != "" {
@@ -334,7 +337,7 @@ func (app *app) loop() {
 
 			app.nav.previewChan <- ""
 
-			log.Printf("*************** closing client, PID: %d ***************", os.Getpid())
+			log.Printf("*************** closing client, PID: %d ***************", gClientID)
 
 			return
 		case n := <-app.nav.copyJobsChan:
@@ -392,8 +395,7 @@ func (app *app) loop() {
 				oldCurrPath = curr.path
 			}
 
-			prev, ok := app.nav.dirCache[d.path]
-			if ok {
+			if prev, ok := app.nav.dirCache[d.path]; ok {
 				d.ind = prev.ind
 				d.pos = prev.pos
 				d.visualAnchor = min(prev.visualAnchor, len(d.files)-1)
@@ -401,6 +403,8 @@ func (app *app) loop() {
 				d.filter = prev.filter
 				d.sort()
 				d.sel(prev.name(), app.nav.height)
+			} else {
+				d.sort()
 			}
 			app.nav.dirCache[d.path] = d
 
@@ -414,11 +418,17 @@ func (app *app) loop() {
 
 			app.watchDir(d)
 
-			paths := []string{}
-			for _, file := range d.allFiles {
-				paths = append(paths, file.path)
+			// Avoid flickering UI and multiple, unnecessary `on-load` calls
+			// triggered by Git commands executed inside the users `on-load`
+			// command (often used to add git symbols using `addcustominfo`).
+			// TODO: Should `watch` also ignore `.git` directories?
+			if filepath.Base(d.path) != ".git" {
+				paths := make([]string, len(d.allFiles))
+				for i, file := range d.allFiles {
+					paths[i] = file.path
+				}
+				onLoad(app, paths)
 			}
-			onLoad(app, paths)
 
 			if d.path == app.nav.currDir().path {
 				app.nav.preload()
@@ -426,6 +436,10 @@ func (app *app) loop() {
 
 			app.ui.draw(app.nav)
 		case r := <-app.nav.regChan:
+			if r.height != app.nav.height {
+				delete(app.nav.regCache, r.path)
+				continue
+			}
 			app.nav.regCache[r.path] = r
 
 			if curr := app.nav.currFile(); curr != nil {
@@ -439,11 +453,7 @@ func (app *app) loop() {
 
 			app.ui.draw(app.nav)
 		case f := <-app.nav.fileChan:
-			for _, dir := range app.nav.dirCache {
-				if dir.path != filepath.Dir(f.path) {
-					continue
-				}
-
+			if dir, ok := app.nav.dirCache[filepath.Dir(f.path)]; ok {
 				for i := range dir.allFiles {
 					if dir.allFiles[i].path == f.path {
 						dir.allFiles[i] = f
@@ -456,8 +466,20 @@ func (app *app) loop() {
 				dir.sel(name, app.nav.height)
 			}
 
-			delete(app.nav.regCache, f.path)
-			app.ui.loadFile(app, false)
+			if r, ok := app.nav.regCache[f.path]; ok {
+				app.nav.checkReg(r)
+			} else {
+				r = &reg{loading: true, loadTime: time.Now(), path: f.path}
+				app.nav.regCache[f.path] = r
+				if gOpts.preload {
+					select {
+					case app.nav.preloadChan <- f.path:
+					default:
+					}
+				} else {
+					app.nav.previewChan <- f.path
+				}
+			}
 			onLoad(app, []string{f.path})
 			app.ui.draw(app.nav)
 		case path := <-app.nav.delChan:
@@ -467,11 +489,12 @@ func (app *app) loop() {
 			}
 
 			deletePathRecursive(app.nav.regCache, path)
-
 			deletePathRecursive(app.nav.dirCache, path)
-			currPath := app.nav.currDir().path
-			if currPath == path || strings.HasPrefix(currPath, path+string(filepath.Separator)) {
-				app.nav.loadDirs()
+
+			if slices.Contains(app.nav.dirPaths, path) {
+				if err := app.nav.cd(filepath.Dir(path)); err != nil {
+					log.Print(err)
+				}
 			}
 		case ev := <-app.ui.evChan:
 			e := app.ui.readEvent(ev, app.nav)
@@ -503,7 +526,6 @@ func (app *app) loop() {
 			app.nav.renew()
 			app.ui.loadFile(app, false)
 		case <-app.nav.previewTimer.C:
-			app.nav.previewLoading = true
 			app.ui.draw(app.nav)
 		case <-app.nav.preloadTimer.C:
 			app.nav.preload()
@@ -679,14 +701,14 @@ func (app *app) doComplete() (matches []compMatch) {
 		matches, longest = completeSearch(app.ui.cmdAccLeft)
 	}
 
-	app.ui.cmdAccLeft = []rune(longest)
+	app.ui.cmdAccLeft = longest
 	app.ui.menu, app.ui.menuSelect = listMatches(app.ui.screen, matches, -1)
 	return
 }
 
 func (app *app) menuComplete(direction int) {
 	if !app.menuCompActive {
-		app.menuCompTmp = tokenize(string(app.ui.cmdAccLeft))
+		app.menuCompTmp = tokenize(app.ui.cmdAccLeft)
 		app.menuComps = app.doComplete()
 		if len(app.menuComps) > 1 {
 			app.menuCompInd = -1
@@ -702,7 +724,7 @@ func (app *app) menuComplete(direction int) {
 
 		toks := slices.Clone(app.menuCompTmp)
 		toks[len(toks)-1] = app.menuComps[app.menuCompInd].result
-		app.ui.cmdAccLeft = []rune(strings.Join(toks, " "))
+		app.ui.cmdAccLeft = strings.Join(toks, " ")
 	}
 	app.ui.menu, app.ui.menuSelect = listMatches(app.ui.screen, app.menuComps, app.menuCompInd)
 }

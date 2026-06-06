@@ -35,7 +35,6 @@ var (
 	gHostname       string
 	gLastDirPath    string
 	gSelectionPath  string
-	gSocketProt     string
 	gSocketPath     string
 	gLogPath        string
 	gSelect         string
@@ -101,10 +100,13 @@ func exportFlags() {
 
 // used by exportOpts below
 func fieldToString(field reflect.Value) string {
-	kind := field.Kind()
-	var value string
+	// prevent returning <main.borderStyle Value>
+	if field.Type() == reflect.TypeFor[borderStyle]() {
+		return borderStyle(field.Uint()).String()
+	}
 
-	switch kind {
+	var value string
+	switch field.Kind() {
 	case reflect.Int:
 		value = strconv.Itoa(int(field.Int()))
 	case reflect.Bool:
@@ -135,17 +137,16 @@ func getOptsMap() map[string]string {
 		// Get field name and prefix it with lf_
 		name := "lf_" + t.Field(i).Name
 
-		// Skip maps
-		if name == "lf_nkeys" || name == "lf_vkeys" || name == "lf_cmdkeys" || name == "lf_cmds" {
+		switch name {
+		case "lf_nkeys", "lf_vkeys", "lf_cmdkeys", "lf_cmds":
+			// Skip maps
 			continue
-		}
-
-		if name == "lf_user" {
+		case "lf_user":
 			// set each user option
 			for key, value := range gOpts.user {
 				opts[name+"_"+key] = value
 			}
-		} else {
+		default:
 			opts[name] = fieldToString(v.Field(i))
 		}
 	}
@@ -176,19 +177,13 @@ func startServer() {
 }
 
 func checkServer() {
-	if gSocketProt == "unix" {
-		if _, err := os.Stat(gSocketPath); os.IsNotExist(err) {
-			startServer()
-		} else if _, err := net.Dial(gSocketProt, gSocketPath); err != nil {
-			if err := os.Remove(gSocketPath); err != nil {
-				log.Print(err)
-			}
-			startServer()
+	if _, err := os.Stat(gSocketPath); os.IsNotExist(err) {
+		startServer()
+	} else if _, err := net.Dial("unix", gSocketPath); err != nil {
+		if err := os.Remove(gSocketPath); err != nil {
+			log.Print(err)
 		}
-	} else {
-		if _, err := net.Dial(gSocketProt, gSocketPath); err != nil {
-			startServer()
-		}
+		startServer()
 	}
 }
 
@@ -226,13 +221,15 @@ func printVersion() {
 func main() {
 	flag.Usage = func() {
 		f := flag.CommandLine.Output()
-		fmt.Fprintln(f, "lf - Terminal file manager")
-		fmt.Fprintln(f, "")
-		fmt.Fprintf(f, "Usage:  %s [options] [cd-or-select-path]\n\n", os.Args[0])
-		fmt.Fprintln(f, "  cd-or-select-path")
-		fmt.Fprintln(f, "        set the initial dir or file selection to the given argument")
-		fmt.Fprintln(f, "")
-		fmt.Fprintln(f, "Options:")
+		fmt.Fprintf(f, `lf - Terminal file manager
+
+Usage:  %s [options] [cd-or-select-path]
+
+  cd-or-select-path
+        set the initial dir or file selection to the given argument
+
+Options:
+`, os.Args[0])
 		flag.PrintDefaults()
 	}
 
@@ -312,7 +309,6 @@ func main() {
 
 	flag.Parse()
 
-	gSocketProt = gDefaultSocketProt
 	gSocketPath = gDefaultSocketPath
 
 	if gLogPath != "" {

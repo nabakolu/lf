@@ -1,8 +1,8 @@
 package main
 
 import (
+	"fmt"
 	"maps"
-	"path/filepath"
 	"time"
 )
 
@@ -22,15 +22,11 @@ const (
 )
 
 func isValidSortMethod(method sortMethod) bool {
-	return method == naturalSort ||
-		method == nameSort ||
-		method == sizeSort ||
-		method == timeSort ||
-		method == atimeSort ||
-		method == btimeSort ||
-		method == ctimeSort ||
-		method == extSort ||
-		method == customSort
+	switch method {
+	case naturalSort, nameSort, sizeSort, timeSort, atimeSort, btimeSort, ctimeSort, extSort, customSort:
+		return true
+	}
+	return false
 }
 
 const invalidSortErrorMessage = `sortby: value should either be 'natural', 'name', 'size', 'time', 'atime', 'btime', 'ctime', 'ext' or 'custom'`
@@ -43,10 +39,52 @@ const (
 	regexSearch searchMethod = "regex"
 )
 
+type cursorStyle string
+
+const (
+	defaultCursor        cursorStyle = "default"
+	blockCursor          cursorStyle = "block"
+	underlineCursor      cursorStyle = "underline"
+	barCursor            cursorStyle = "bar"
+	blinkBlockCursor     cursorStyle = "blinkblock"
+	blinkUnderlineCursor cursorStyle = "blinkunderline"
+	blinkBarCursor       cursorStyle = "blinkbar"
+)
+
+type borderStyle byte
+
+const (
+	borderOutline borderStyle = 1 << iota
+	borderSeparators
+	borderRound
+
+	borderBox          = borderOutline | borderSeparators
+	borderRoundOutline = borderOutline | borderRound
+	borderRoundBox     = borderBox | borderRound
+)
+
+func (s borderStyle) String() string {
+	switch s {
+	case borderBox:
+		return "box"
+	case borderRoundBox:
+		return "roundbox"
+	case borderOutline:
+		return "outline"
+	case borderRoundOutline:
+		return "roundoutline"
+	case borderSeparators:
+		return "separators"
+	default:
+		return fmt.Sprintf("borderStyle(%d)", s)
+	}
+}
+
 var gOpts struct {
 	anchorfind       bool
 	autoquit         bool
 	borderfmt        string
+	borderstyle      borderStyle
 	cleaner          string
 	copyfmt          string
 	cursoractivefmt  string
@@ -81,6 +119,7 @@ var gOpts struct {
 	mergeindicators  bool
 	mouse            bool
 	number           bool
+	numbercursorfmt  string
 	numberfmt        string
 	period           int
 	preload          bool
@@ -91,7 +130,6 @@ var gOpts struct {
 	ratios           []int
 	relativenumber   bool
 	reverse          bool
-	roundbox         bool
 	rulerfile        string
 	rulerfmt         string
 	scrolloff        int
@@ -106,10 +144,13 @@ var gOpts struct {
 	smartcase        bool
 	smartdia         bool
 	sortby           sortMethod
+	sortignorecase   bool
+	sortignoredia    bool
 	statfmt          string
 	tabstop          int
 	tagfmt           string
 	tempmarks        string
+	terminalcursor   cursorStyle
 	timefmt          string
 	truncatechar     string
 	truncatepct      int
@@ -126,90 +167,85 @@ var gOpts struct {
 }
 
 var gLocalOpts struct {
-	dircounts map[string]bool
-	dirfirst  map[string]bool
-	dironly   map[string]bool
-	hidden    map[string]bool
-	info      map[string][]string
-	reverse   map[string]bool
-	sortby    map[string]sortMethod
-}
-
-func localOptPaths(path string) []string {
-	list := []string{path}
-	for curr := path; !isRoot(curr); curr = filepath.Dir(curr) {
-		list = append(list, curr+string(filepath.Separator))
-	}
-	return list
+	dircounts      map[string]bool
+	dirfirst       map[string]bool
+	dironly        map[string]bool
+	hidden         map[string]bool
+	info           map[string][]string
+	reverse        map[string]bool
+	sortby         map[string]sortMethod
+	sortignorecase map[string]bool
+	sortignoredia  map[string]bool
 }
 
 func getDirCounts(path string) bool {
-	for _, key := range localOptPaths(path) {
-		if val, ok := gLocalOpts.dircounts[key]; ok {
-			return val
-		}
+	if val, ok := gLocalOpts.dircounts[path]; ok {
+		return val
 	}
 	return gOpts.dircounts
 }
 
 func getDirFirst(path string) bool {
-	for _, key := range localOptPaths(path) {
-		if val, ok := gLocalOpts.dirfirst[key]; ok {
-			return val
-		}
+	if val, ok := gLocalOpts.dirfirst[path]; ok {
+		return val
 	}
 	return gOpts.dirfirst
 }
 
 func getDirOnly(path string) bool {
-	for _, key := range localOptPaths(path) {
-		if val, ok := gLocalOpts.dironly[key]; ok {
-			return val
-		}
+	if val, ok := gLocalOpts.dironly[path]; ok {
+		return val
 	}
 	return gOpts.dironly
 }
 
 func getHidden(path string) bool {
-	for _, key := range localOptPaths(path) {
-		if val, ok := gLocalOpts.hidden[key]; ok {
-			return val
-		}
+	if val, ok := gLocalOpts.hidden[path]; ok {
+		return val
 	}
 	return gOpts.hidden
 }
 
 func getInfo(path string) []string {
-	for _, key := range localOptPaths(path) {
-		if val, ok := gLocalOpts.info[key]; ok {
-			return val
-		}
+	if val, ok := gLocalOpts.info[path]; ok {
+		return val
 	}
 	return gOpts.info
 }
 
 func getReverse(path string) bool {
-	for _, key := range localOptPaths(path) {
-		if val, ok := gLocalOpts.reverse[key]; ok {
-			return val
-		}
+	if val, ok := gLocalOpts.reverse[path]; ok {
+		return val
 	}
 	return gOpts.reverse
 }
 
 func getSortBy(path string) sortMethod {
-	for _, key := range localOptPaths(path) {
-		if val, ok := gLocalOpts.sortby[key]; ok {
-			return val
-		}
+	if val, ok := gLocalOpts.sortby[path]; ok {
+		return val
 	}
 	return gOpts.sortby
+}
+
+func getSortIgnoreCase(path string) bool {
+	if val, ok := gLocalOpts.sortignorecase[path]; ok {
+		return val
+	}
+	return gOpts.sortignorecase
+}
+
+func getSortIgnoreDia(path string) bool {
+	if val, ok := gLocalOpts.sortignoredia[path]; ok {
+		return val
+	}
+	return gOpts.sortignoredia
 }
 
 func init() {
 	gOpts.anchorfind = true
 	gOpts.autoquit = true
 	gOpts.borderfmt = "\033[0m"
+	gOpts.borderstyle = borderBox
 	gOpts.cleaner = ""
 	gOpts.copyfmt = "\033[7;33m"
 	gOpts.cursoractivefmt = "\033[7m"
@@ -244,6 +280,7 @@ func init() {
 	gOpts.mergeindicators = false
 	gOpts.mouse = false
 	gOpts.number = false
+	gOpts.numbercursorfmt = ""
 	gOpts.numberfmt = "\033[33m"
 	gOpts.period = 0
 	gOpts.preload = false
@@ -254,7 +291,6 @@ func init() {
 	gOpts.ratios = []int{1, 2, 3}
 	gOpts.relativenumber = false
 	gOpts.reverse = false
-	gOpts.roundbox = false
 	gOpts.rulerfile = ""
 	gOpts.rulerfmt = ""
 	gOpts.scrolloff = 0
@@ -269,10 +305,13 @@ func init() {
 	gOpts.smartcase = true
 	gOpts.smartdia = false
 	gOpts.sortby = naturalSort
+	gOpts.sortignorecase = true
+	gOpts.sortignoredia = true
 	gOpts.statfmt = "\033[36m%p\033[0m| %c| %u| %g| %S| %t| -> %l"
 	gOpts.tabstop = 8
 	gOpts.tagfmt = "\033[31m"
 	gOpts.tempmarks = "'"
+	gOpts.terminalcursor = defaultCursor
 	gOpts.timefmt = time.ANSIC
 	gOpts.truncatechar = "~"
 	gOpts.truncatepct = 100
@@ -373,42 +412,40 @@ func init() {
 
 	// Command-line mode bindings can be assigned directly
 	gOpts.cmdkeys = map[string]expr{
-		"<space>":        &callExpr{"cmd-insert", []string{" "}, 1},
-		"<esc>":          &callExpr{"cmd-escape", nil, 1},
-		"<tab>":          &callExpr{"cmd-complete", nil, 1},
-		"<enter>":        &callExpr{"cmd-enter", nil, 1},
-		"<c-j>":          &callExpr{"cmd-enter", nil, 1},
-		"<down>":         &callExpr{"cmd-history-next", nil, 1},
-		"<c-n>":          &callExpr{"cmd-history-next", nil, 1},
-		"<up>":           &callExpr{"cmd-history-prev", nil, 1},
-		"<c-p>":          &callExpr{"cmd-history-prev", nil, 1},
-		"<delete>":       &callExpr{"cmd-delete", nil, 1},
-		"<c-d>":          &callExpr{"cmd-delete", nil, 1},
-		"<backspace>":    &callExpr{"cmd-delete-back", nil, 1},
-		"<backspace2>":   &callExpr{"cmd-delete-back", nil, 1},
-		"<left>":         &callExpr{"cmd-left", nil, 1},
-		"<c-b>":          &callExpr{"cmd-left", nil, 1},
-		"<right>":        &callExpr{"cmd-right", nil, 1},
-		"<c-f>":          &callExpr{"cmd-right", nil, 1},
-		"<home>":         &callExpr{"cmd-home", nil, 1},
-		"<c-a>":          &callExpr{"cmd-home", nil, 1},
-		"<end>":          &callExpr{"cmd-end", nil, 1},
-		"<c-e>":          &callExpr{"cmd-end", nil, 1},
-		"<c-u>":          &callExpr{"cmd-delete-home", nil, 1},
-		"<c-k>":          &callExpr{"cmd-delete-end", nil, 1},
-		"<c-w>":          &callExpr{"cmd-delete-unix-word", nil, 1},
-		"<c-y>":          &callExpr{"cmd-yank", nil, 1},
-		"<c-t>":          &callExpr{"cmd-transpose", nil, 1},
-		"<c-c>":          &callExpr{"cmd-interrupt", nil, 1},
-		"<a-f>":          &callExpr{"cmd-word", nil, 1},
-		"<a-b>":          &callExpr{"cmd-word-back", nil, 1},
-		"<a-c>":          &callExpr{"cmd-capitalize-word", nil, 1},
-		"<a-d>":          &callExpr{"cmd-delete-word", nil, 1},
-		"<a-backspace>":  &callExpr{"cmd-delete-word-back", nil, 1},
-		"<a-backspace2>": &callExpr{"cmd-delete-word-back", nil, 1},
-		"<a-u>":          &callExpr{"cmd-uppercase-word", nil, 1},
-		"<a-l>":          &callExpr{"cmd-lowercase-word", nil, 1},
-		"<a-t>":          &callExpr{"cmd-transpose-word", nil, 1},
+		"<space>":       &callExpr{"cmd-insert", []string{" "}, 1},
+		"<esc>":         &callExpr{"cmd-escape", nil, 1},
+		"<tab>":         &callExpr{"cmd-complete", nil, 1},
+		"<enter>":       &callExpr{"cmd-enter", nil, 1},
+		"<c-j>":         &callExpr{"cmd-enter", nil, 1},
+		"<down>":        &callExpr{"cmd-history-next", nil, 1},
+		"<c-n>":         &callExpr{"cmd-history-next", nil, 1},
+		"<up>":          &callExpr{"cmd-history-prev", nil, 1},
+		"<c-p>":         &callExpr{"cmd-history-prev", nil, 1},
+		"<delete>":      &callExpr{"cmd-delete", nil, 1},
+		"<c-d>":         &callExpr{"cmd-delete", nil, 1},
+		"<backspace>":   &callExpr{"cmd-delete-back", nil, 1},
+		"<left>":        &callExpr{"cmd-left", nil, 1},
+		"<c-b>":         &callExpr{"cmd-left", nil, 1},
+		"<right>":       &callExpr{"cmd-right", nil, 1},
+		"<c-f>":         &callExpr{"cmd-right", nil, 1},
+		"<home>":        &callExpr{"cmd-home", nil, 1},
+		"<c-a>":         &callExpr{"cmd-home", nil, 1},
+		"<end>":         &callExpr{"cmd-end", nil, 1},
+		"<c-e>":         &callExpr{"cmd-end", nil, 1},
+		"<c-u>":         &callExpr{"cmd-delete-home", nil, 1},
+		"<c-k>":         &callExpr{"cmd-delete-end", nil, 1},
+		"<c-w>":         &callExpr{"cmd-delete-unix-word", nil, 1},
+		"<c-y>":         &callExpr{"cmd-yank", nil, 1},
+		"<c-t>":         &callExpr{"cmd-transpose", nil, 1},
+		"<c-c>":         &callExpr{"cmd-interrupt", nil, 1},
+		"<a-f>":         &callExpr{"cmd-word", nil, 1},
+		"<a-b>":         &callExpr{"cmd-word-back", nil, 1},
+		"<a-c>":         &callExpr{"cmd-capitalize-word", nil, 1},
+		"<a-d>":         &callExpr{"cmd-delete-word", nil, 1},
+		"<a-backspace>": &callExpr{"cmd-delete-word-back", nil, 1},
+		"<a-u>":         &callExpr{"cmd-uppercase-word", nil, 1},
+		"<a-l>":         &callExpr{"cmd-lowercase-word", nil, 1},
+		"<a-t>":         &callExpr{"cmd-transpose-word", nil, 1},
 	}
 
 	gOpts.cmds = make(map[string]expr)
@@ -421,6 +458,8 @@ func init() {
 	gLocalOpts.info = make(map[string][]string)
 	gLocalOpts.reverse = make(map[string]bool)
 	gLocalOpts.sortby = make(map[string]sortMethod)
+	gLocalOpts.sortignorecase = make(map[string]bool)
+	gLocalOpts.sortignoredia = make(map[string]bool)
 
 	setDefaults()
 }

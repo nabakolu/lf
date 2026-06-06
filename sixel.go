@@ -1,14 +1,13 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/gdamore/tcell/v3"
 )
 
 type sixelScreen struct {
@@ -43,6 +42,7 @@ func (sxs *sixelScreen) printSixel(win *win, screen tcell.Screen, reg *reg) {
 				break
 			}
 
+			line = sanitizePreview(line)
 			screen.LockRegion(win.x, y, printLength(line), 1, true)
 			fmt.Fprintf(&b, "\033[%d;%dH", y+1, win.x+1)
 			b.WriteString(line)
@@ -58,13 +58,6 @@ func (sxs *sixelScreen) printSixel(win *win, screen tcell.Screen, reg *reg) {
 
 		iw, _ := strconv.Atoi(matches[1])
 		ih, _ := strconv.Atoi(matches[2])
-
-		if os.Getenv("TMUX") != "" {
-			// tmux rounds the image height up to a multiple of 6, so we
-			// need to do the same to avoid overwriting the image, as tmux
-			// would remove the image if we touched it.
-			ih = (ih + 5) / 6 * 6
-		}
 
 		sw := (iw + cw - 1) / cw
 		sh := (ih + ch - 1) / ch
@@ -93,8 +86,7 @@ func (sxs *sixelScreen) printSixel(win *win, screen tcell.Screen, reg *reg) {
 func cellSize(screen tcell.Screen) (int, int, error) {
 	tty, ok := screen.Tty()
 	if !ok {
-		// fallback for Windows Terminal
-		return 10, 20, nil
+		return -1, -1, fmt.Errorf("failed to get tty")
 	}
 
 	ws, err := tty.WindowSize()
@@ -104,7 +96,8 @@ func cellSize(screen tcell.Screen) (int, int, error) {
 
 	cw, ch := ws.CellDimensions()
 	if cw <= 0 || ch <= 0 {
-		return -1, -1, errors.New("cell dimensions should be greater than 0")
+		// fallback for Windows Terminal
+		return 10, 20, nil
 	}
 
 	return cw, ch, nil

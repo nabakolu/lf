@@ -68,7 +68,7 @@ Use the config file at *path* instead of the normal search locations. This only 
 
 **-print-last-dir**
 
-Print the last directory to stdout when lf exits. This can be used to let lf change your shells working directory. See `CHANGING DIRECTORY` for more details.
+Print the last directory to stdout when lf exits. This can be used to let lf change your shell's working directory. See `CHANGING DIRECTORY` for more details.
 
 **-last-dir-path** *path*
 
@@ -237,7 +237,7 @@ The following Command-line mode commands are provided by lf:
 	cmd-home                 (default '<c-a>' and '<home>')
 	cmd-end                  (default '<c-e>' and '<end>')
 	cmd-delete               (default '<c-d>' and '<delete>')
-	cmd-delete-back          (default '<backspace>' and '<backspace2>')
+	cmd-delete-back          (default '<backspace>')
 	cmd-delete-home          (default '<c-u>')
 	cmd-delete-end           (default '<c-k>')
 	cmd-delete-unix-word     (default '<c-w>')
@@ -247,7 +247,7 @@ The following Command-line mode commands are provided by lf:
 	cmd-word                 (default '<a-f>')
 	cmd-word-back            (default '<a-b>')
 	cmd-delete-word          (default '<a-d>')
-	cmd-delete-word-back     (default '<a-backspace>' and '<a-backspace2>')
+	cmd-delete-word-back     (default '<a-backspace>')
 	cmd-capitalize-word      (default '<a-c>')
 	cmd-uppercase-word       (default '<a-u>')
 	cmd-lowercase-word       (default '<a-l>')
@@ -257,6 +257,7 @@ The following options can be used to customize the behavior of lf:
 	anchorfind        bool      (default true)
 	autoquit          bool      (default true)
 	borderfmt         string    (default "\033[0m")
+	borderstyle       string    (default 'box')
 	cleaner           string    (default '')
 	copyfmt           string    (default "\033[7;33m")
 	cursoractivefmt   string    (default "\033[7m")
@@ -291,6 +292,7 @@ The following options can be used to customize the behavior of lf:
 	mergeindicators   bool      (default false)
 	mouse             bool      (default false)
 	number            bool      (default false)
+	numbercursorfmt   string    (default '')
 	numberfmt         string    (default "\033[33m")
 	period            int       (default 0)
 	preload           bool      (default false)
@@ -301,7 +303,6 @@ The following options can be used to customize the behavior of lf:
 	ratios            []int     (default '1:2:3')
 	relativenumber    bool      (default false)
 	reverse           bool      (default false)
-	roundbox          bool      (default false)
 	rulerfile         string    (default "")
 	rulerfmt          string    (default "")
 	scrolloff         int       (default 0)
@@ -316,10 +317,13 @@ The following options can be used to customize the behavior of lf:
 	smartcase         bool      (default true)
 	smartdia          bool      (default false)
 	sortby            string    (default 'natural')
+	sortignorecase    bool      (default true)
+	sortignoredia     bool      (default true)
 	statfmt           string    (default "\033[36m%p\033[0m| %c| %u| %g| %S| %t| -> %l")
 	tabstop           int       (default 8)
 	tagfmt            string    (default "\033[31m")
 	tempmarks         string    (default '')
+	terminalcursor    string    (default 'default')
 	timefmt           string    (default 'Mon Jan _2 15:04:05 2006')
 	truncatechar      string    (default '~')
 	truncatepct       int       (default 100)
@@ -800,7 +804,7 @@ Move the cursor to the beginning/end of the line.
 
 Delete the next character.
 
-## cmd-delete-back (default `<backspace>` and `<backspace2>`)
+## cmd-delete-back (default `<backspace>`)
 
 Delete the previous character.
 When at the beginning of a prompt, returns either to Normal mode or to `:` mode.
@@ -817,9 +821,15 @@ Delete the previous Unix word.
 
 Paste the buffer content containing the last deleted item.
 
-## cmd-transpose (default `<c-t>`), cmd-transpose-word (default `<a-t>`)
+## cmd-transpose (default `<c-t>`)
 
-Transpose the positions of the last two characters/words.
+Swap the characters before and after the cursor, then move the cursor forward.
+If there is no character after the cursor, swap the previous two characters instead.
+
+## cmd-transpose-word (default `<a-t>`)
+
+Swap the words before and after the cursor, then move the cursor forward.
+If there is no word after the cursor, swap the previous two words instead.
 
 ## cmd-word (default `<a-f>`), cmd-word-back (default `<a-b>`)
 
@@ -829,7 +839,7 @@ Move the cursor by one word in the forward/backward direction.
 
 Delete the next word in the forward direction.
 
-## cmd-delete-word-back (default `<a-backspace>` and `<a-backspace2>`)
+## cmd-delete-word-back (default `<a-backspace>`)
 
 Delete the previous word in the backward direction.
 
@@ -852,7 +862,19 @@ Automatically quit the server when there are no clients left connected.
 
 ## borderfmt (string) (default `\033[0m`)
 
-Format string of the box drawing characters enabled by the `drawbox` option.
+Format string of border characters.
+
+## borderstyle (string) (default `box`)
+
+Border style used by `drawbox`.
+
+The following styles are supported:
+
+	box           outline around all panes and separators between them
+	roundbox      like `box`, but with rounded outer corners
+	outline       outline around all panes
+	roundoutline  like `outline`, but with rounded outer corners
+	separators    separators between panes
 
 ## cleaner (string) (default ``) (not called if empty)
 
@@ -890,7 +912,7 @@ When this option is enabled, directory sizes show the number of items inside ins
 This information needs to be calculated by reading the directory and counting the items inside.
 Therefore, this option is disabled by default for performance reasons.
 This option only has an effect when `info` has a `size` field and the pane is wide enough to show the information.
-999 items are counted per directory at most, and bigger directories are shown as `999+`.
+9999 items are counted per directory at most, and bigger directories are shown as `9999+`.
 
 ## dirfirst (bool) (default true)
 
@@ -907,7 +929,7 @@ If enabled, directories will also be passed to the previewer script. This allows
 
 ## drawbox (bool) (default false)
 
-Draw boxes around panes with box drawing characters.
+Draw borders around panes using box drawing characters.
 
 ## dupfilefmt (string) (default `%f.~%n~`)
 
@@ -968,11 +990,11 @@ This option does not have any effect on Windows.
 
 ## ignorecase (bool) (default true)
 
-Ignore case in sorting and search patterns.
+Ignore case in search patterns. See also `sortignorecase`.
 
 ## ignoredia (bool) (default true)
 
-Ignore diacritics in sorting and search patterns.
+Ignore diacritics in search patterns. See also `sortignoredia`.
 
 ## incfilter (bool) (default false)
 
@@ -1034,9 +1056,11 @@ Send mouse events as input.
 Show the position number for directory items on the left side of the pane.
 When the `relativenumber` option is enabled, only the current line shows the absolute position and relative positions are shown for the rest.
 
-## numberfmt (string) (default `\033[33m`)
+## numberfmt (string) (default `\033[33m`), numbercursorfmt (string) (default ``)
 
-Format string of the position number for each line.
+Format strings for highlighting line numbers.
+`numberfmt` applies to all lines.
+`numbercursorfmt` applies to the cursor line and falls back to `numberfmt` when left empty.
 
 ## period (int) (default 0)
 
@@ -1054,13 +1078,13 @@ Allow previews to be generated in advance using the `previewer` script as the us
 
 List of attributes that are preserved when copying files.
 Currently supported attributes are `mode` (i.e. access mode) and `timestamps` (i.e. modification time and access time).
-Note that preserving other attributes like ownership of change/birth timestamp is desirable, but not portably supported in Go.
+Note that preserving other attributes like ownership or change/birth timestamps is desirable, but not portably supported in Go.
 
 ## preview (bool) (default true)
 
 Show previews of files and directories at the rightmost pane.
 If the file has more lines than the preview pane, the rest of the lines are not read.
-Files containing the null character (U+0000) in the read portion are considered binary files and displayed as `binary`.
+Files are considered binary and displayed as `binary` if the read portion contains a control character other than bell, backspace, tab, newline, vertical tab, form feed, carriage return, escape or delete. 
 
 ## previewer (string) (default ``) (not filtered if empty)
 
@@ -1105,10 +1129,6 @@ When `number` is enabled, the current line shows the absolute position, otherwis
 ## reverse (bool) (default false)
 
 Reverse the direction of sort.
-
-## roundbox (bool) (default false)
-
-Draw rounded outer corners when the `drawbox` option is enabled.
 
 ## rulerfile (string) (default ``)
 
@@ -1186,7 +1206,7 @@ Determines whether file sizes are displayed using binary units (`1K` is 1024 byt
 
 ## smartcase (bool) (default true)
 
-Override `ignorecase` option when the pattern contains an uppercase character.
+Override `ignorecase` option for searching when the pattern contains an uppercase character.
 This option has no effect when `ignorecase` is disabled.
 
 ## smartdia (bool) (default false)
@@ -1209,6 +1229,14 @@ The following sort types are supported:
 	btime     time of file birth
 	ctime     time of last status (inode) change
 	custom    property defined via `addcustominfo` (empty by default)
+
+## sortignorecase (bool) (default true)
+
+Ignore case when sorting. See also `ignorecase`.
+
+## sortignoredia (bool) (default true)
+
+Ignore diacritics when sorting. See also `ignoredia`.
 
 ## statfmt (string) (default `\033[36m%p\033[0m| %c| %u| %g| %S| %t| -> %l`)
 
@@ -1246,7 +1274,12 @@ For example, `\033[4m%s\033[0m` has the same effect as `\033[4m`.
 
 Marks to be considered temporary (e.g. `abc` refers to marks `a`, `b`, and `c`).
 These marks are not synced to other clients and they are not saved in the bookmarks file.
-Note that the special bookmark `` ` `` is always treated as temporary and it does not need to be specified.
+Note that the special bookmark `'` is always treated as temporary and it does not need to be specified.
+
+## terminalcursor (string) (default `default`)
+
+Set the appearance of the terminal cursor for prompts shown in the bottom line.
+Currently supported values are `default`, `block`, `underline`, `bar`, `blinkblock`, `blinkunderline` and `blinkbar`.
 
 ## timefmt (string) (default `Mon Jan _2 15:04:05 2006`)
 
@@ -1478,8 +1511,7 @@ Command `set` is used to set an option which can be a boolean, integer, or strin
 	set sortby "time"  # string value with double quotes (backslash escapes)
 
 Command `setlocal` is used to set a local option for a directory which can be a boolean or string.
-Currently supported local options are `dircounts`, `dirfirst`, `dironly`, `hidden`, `info`, `reverse` and `sortby`.
-Adding a trailing path separator (i.e. `/` for Unix and `\` for Windows) sets the option for the given directory along with its subdirectories:
+Currently supported local options are `dircounts`, `dirfirst`, `dironly`, `hidden`, `info`, `reverse`, `sortby`, `sortignorecase` and `sortignoredia`.
 
 	setlocal /foo/bar hidden         # boolean enable
 	setlocal /foo/bar hidden true    # boolean enable
@@ -1489,8 +1521,6 @@ Adding a trailing path separator (i.e. `/` for Unix and `\` for Windows) sets th
 	setlocal /foo/bar sortby time    # string value without quotes
 	setlocal /foo/bar sortby 'time'  # string value with single quotes (whitespace)
 	setlocal /foo/bar sortby "time"  # string value with double quotes (backslash escapes)
-	setlocal /foo/bar  hidden        # for only '/foo/bar' directory
-	setlocal /foo/bar/ hidden        # for '/foo/bar' and its subdirectories (e.g. '/foo/bar/baz')
 
 Command `map` is used to bind a key in Normal and Visual mode to a command which can be a built-in command, custom command, or shell command:
 
@@ -1564,7 +1594,7 @@ Angle brackets can be assigned with their special names:
 	map <lt> down
 	map <gt> down
 
-Function keys are prefixed with `f` character:
+Function keys are prefixed with an `f` character:
 
 	map <f-1> down
 
@@ -1588,8 +1618,19 @@ It is possible to combine special keys with modifiers:
 
 	map <a-enter> down
 
+Combining multiple modifiers (e.g. `Ctrl+Shift+Space`) is not supported.
+
+Note that lf's key mapping syntax is similar to Vim's, but not identical.
+Some special keys and modifiers use different names and separators, and key names are matched literally (i.e. no case-folding, no aliases), so some familiar forms will not work:
+
+	map <enter> down  # not <Enter>, <Return> or <CR>
+	map <f-1> down    # not <F1>
+	map <a-j> down    # not <A-j> or <M-j> (Meta)
+	map <m-2> down    # not <RightMouse>
+	map <m-up> down   # not <ScrollWheelUp>
+
 WARNING: Some key combinations will likely be intercepted by your OS, window manager, or terminal.
-Other key combinations cannot be recognized by lf due to the way terminals work (e.g. `Ctrl+h` combination sends a backspace key instead).
+Other key combinations may not be distinguishable by lf, depending on how the terminal reports them (e.g. `Ctrl+h` may be reported as `backspace` instead).
 The easiest way to find out the name of a key combination and whether it will work on your system is to press the key while lf is running and read the name from the `unknown mapping` error.
 
 Mouse buttons are prefixed with an `m` character:
@@ -1597,8 +1638,8 @@ Mouse buttons are prefixed with an `m` character:
 	map <m-1> down  # primary
 	map <m-2> down  # secondary
 	map <m-3> down  # middle
-	map <m-4> down
-	map <m-5> down
+	map <m-4> down  # thumb next
+	map <m-5> down  # thumb prev
 	map <m-6> down
 	map <m-7> down
 	map <m-8> down
@@ -1720,7 +1761,7 @@ To use this feature, you need to use a client which supports communicating with 
 OpenBSD implementation of netcat (nc) is one such example.
 You can use it to send a command to the socket file:
 
-	echo 'send echo hello world' | nc -U ${XDG_RUNTIME_DIR:-/tmp}/lf.${USER}.sock
+	echo 'send echo hello world' | nc -U ${XDG_RUNTIME_DIR:-/tmp/lf-$(id -u)}/lf.sock
 
 Since such a client may not be available everywhere, lf comes bundled with a command line flag to be used as such.
 When using lf, you do not need to specify the address of the socket file.
@@ -1963,7 +2004,7 @@ Since the preview script is called for each file selection change, it may not ge
 To deal with this, the `preload` option can be set to enable file previews to be preloaded in advance.
 If enabled, the preview script will be run on files in advance as the user navigates through them.
 In this case, if the exit code of the preview script is zero, then the output will be cached in memory and displayed by lf (useful for text or sixel previews).
-Otherwise, it will fallback to calling the preview script again when the file is actually selected (useful for previews managed by an external program).
+Otherwise, it will fall back to calling the preview script again when the file is actually selected (useful for previews managed by an external program).
 
 # CHANGING DIRECTORY
 
@@ -2002,7 +2043,7 @@ You can add an extra call to make it run on startup as well:
 	cmd on-cd &{{ ... }}
 	on-cd
 
-Note that all shell commands are possible but `%` and `&` are usually more appropriate as `$` and `!` causes flickers and pauses respectively.
+Note that all shell command types can be used, but `%` and `&` are usually more appropriate, as `$` and `!` cause flickering and pauses respectively.
 
 There is also a `pre-cd` command, that works like `on-cd`, but is run before the directory is actually changed.
 Another related command is `on-load` which gets executed when loading a directory.
@@ -2093,7 +2134,7 @@ Lastly, you may also want to configure the colors of the prompt line to match th
 Colors of the prompt line can be configured using the `promptfmt` option which can include hardcoded colors as ANSI escapes.
 See the default value of this option to have an idea about how to color this line.
 
-It is worth noting that lf uses as many colors advertised by your terminal's entry in terminfo or infocmp databases on your system.
+It is worth noting that lf uses as many colors as advertised by your terminal's entry in terminfo or infocmp databases on your system.
 If an entry is not present, it falls back to an internal database.
 If your terminal supports 24-bit colors but either does not have a database entry or does not advertise all capabilities, you can enable support by setting the `$COLORTERM` variable to `truecolor` or ensuring `$TERM` is set to a value that ends with `-truecolor`.
 
@@ -2191,7 +2232,7 @@ https://en.wikipedia.org/wiki/ANSI_escape_code
 Icons are configured using `LF_ICONS` environment variable or an icons file (refer to the [CONFIGURATION section](https://github.com/gokcehan/lf/blob/master/doc.md#configuration)).
 The variable uses the same syntax as `LS_COLORS/LF_COLORS`.
 Instead of colors, you should use single characters or symbols as values.
-The `ln` entry supports the special value `target`, which will use the link target to select a icon. Filename rules will still apply based on the link's name -- this mirrors GNU's `ls` and `dircolors` behavior.
+The `ln` entry supports the special value `target`, which will use the link target to select an icon. Filename rules will still apply based on the link's name -- this mirrors GNU's `ls` and `dircolors` behavior.
 The icons file (refer to the [CONFIGURATION section](https://github.com/gokcehan/lf/blob/master/doc.md#configuration)) should consist of whitespace-separated arrays with a `#` character to start comments until the end of the line.
 Each line should contain 1-3 columns: a file type or file name pattern, the icon, and an optional icon color. Using only one column disables all rules for that type or name.
 Do not forget to add `set icons true` to your `lfrc` to see the icons.
@@ -2233,8 +2274,9 @@ The following data fields are exported:
 	.Select           []string            Selection list
 	.Visual           []string            Visual selection
 	.Index            int                 Index of the cursor
-	.Total            int                 Number of visible files in the current directory
-	.Hidden           int                 Number of hidden files in the current directory
+	.Total            int                 Number of visible files in the current working directory
+	.Hidden           int                 Number of hidden files in the current working directory
+	.All              int                 Number of all files in the current working directory
 	.LinePercentage   string              Line percentage (analogous to `%p` for the `statusline` option in Vim)
 	.ScrollPercentage string              Scroll percentage (analogous to `%P` for the `statusline` option in Vim)
 	.Filter           []string            Filter currently being applied
@@ -2244,9 +2286,9 @@ The following data fields are exported:
 	.Stat.Path        string              Path of the current file
 	.Stat.Name        string              Name of the current file
 	.Stat.Extension   string              Extension of the current file
-	.Stat.Size        uint64              Size of the current file
-	.Stat.DirSize     *uint64             Total size of the current directory if calculated via `calcdirsize`
-	.Stat.DirCount    *uint64             Number of items in the current directory if the `dircounts` option is enabled
+	.Stat.Size        int64               Size of the current file
+	.Stat.DirSize     int64               Total size of the current directory if calculated via `calcdirsize` (`-1` if not calculated)
+	.Stat.DirCount    int                 Number of items in the current directory if the `dircounts` option is enabled (`-1` if the directory cannot be read)
 	.Stat.Permissions string              Permissions of the current file
 	.Stat.ModTime     string              Last modified time of the current file (formatted based on the `timefmt` option)
 	.Stat.AccessTime  string              Last access time of the current file (formatted based on the `timefmt` option)
@@ -2262,7 +2304,7 @@ The following functions are exported:
 
 	df       func() string                   Get an indicator representing the amount of free disk space available
 	env      func(string) string             Get the value of an environment variable
-	humanize func(uint64) string             Express a file size in a human-readable format
+	humanize func(int64) string              Express a file size in a human-readable format
 	join     func([]string, string) string   Join a string array by a separator
 	lower    func(string) string             Convert a string to lowercase
 	substr   func(string, int, int) string   Get a substring based on starting index and length

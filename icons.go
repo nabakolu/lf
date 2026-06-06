@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/gdamore/tcell/v3"
 )
 
 type iconDef struct {
@@ -41,7 +41,7 @@ func parseIcons() iconMap {
 		"ow=d",
 		"st=t",
 		"di=d",
-		"pi=",
+		"pi=p",
 		"so=s",
 		"bd=b",
 		"cd=c",
@@ -165,6 +165,9 @@ func (im iconMap) get(f *file) iconDef {
 		key = "su"
 	case f.Mode()&os.ModeSetgid != 0:
 		key = "sg"
+	// disable executable icon
+	// case isExecutable(f.FileInfo):
+		// key = "ex"
 	}
 
 	if val, ok := im.icons[key]; ok {
@@ -182,11 +185,6 @@ func (im iconMap) get(f *file) iconDef {
 	if val, ok := im.icons[filepath.Base(f.Name())+".*"]; ok {
 		return val
 	}
-
-	// disable executable icon
-	//if val, ok := im["ex"]; ok && f.Mode()&0111 != 0 {
-	//	return val
-	//}
 
 	if val, ok := im.icons["fi"]; ok {
 		return val

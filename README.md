@@ -42,28 +42,28 @@ Building from the source requires [Go](https://go.dev/).
 On Unix:
 
 ```bash
-env CGO_ENABLED=0 go install -ldflags="-s -w" github.com/gokcehan/lf@latest
+env CGO_ENABLED=0 go install -trimpath -ldflags="-s -w" github.com/gokcehan/lf@latest
 ```
 
 On Windows `cmd`:
 
 ```cmd
 set CGO_ENABLED=0
-go install -ldflags="-s -w" github.com/gokcehan/lf@latest
+go install -trimpath -ldflags="-s -w" github.com/gokcehan/lf@latest
 ```
 
-On Windows `powershell`:
+On Windows `PowerShell`:
 
 ```powershell
 $env:CGO_ENABLED = '0'
-go install -ldflags="-s -w" github.com/gokcehan/lf@latest
+go install -trimpath -ldflags="-s -w" github.com/gokcehan/lf@latest
 ```
 
 ## Usage
 
 After the installation `lf` command should start the application in the current directory.
 
-Run `lf -help` to see command line options.
+Run `lf -help` to see [command line options](doc.md#options).
 
 Run `lf -doc` to see the [documentation](doc.md).
 

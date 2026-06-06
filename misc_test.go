@@ -32,96 +32,92 @@ func TestIsRoot(t *testing.T) {
 	}
 }
 
-func TestRuneSliceWidth(t *testing.T) {
+func TestFirstGraphemeCluster(t *testing.T) {
 	tests := []struct {
-		rs  []rune
-		exp int
+		s   string
+		exp string
 	}{
-		{[]rune{'a', 'b'}, 2},
-		{[]rune{'ı', 'ş'}, 2},
-		{[]rune{'世', '界'}, 4},
-		{[]rune{'世', 'a', '界', 'ı'}, 6},
+		{"", ""},
+		{"a", "a"},
+		{"世界", "世"},
+		{"🏳️a", "🏳️"},
 	}
 
 	for _, test := range tests {
-		if got := runeSliceWidth(test.rs); got != test.exp {
-			t.Errorf("at input '%v' expected '%d' but got '%d'", test.rs, test.exp, got)
+		if got := firstGraphemeCluster(test.s); got != test.exp {
+			t.Errorf("at input '%v' expected '%v' but got '%v'", test.s, test.exp, got)
 		}
 	}
 }
 
-func TestRuneSliceWidthRange(t *testing.T) {
+func TestLastGraphemeCluster(t *testing.T) {
 	tests := []struct {
-		rs  []rune
-		beg int
-		end int
-		exp []rune
+		s   string
+		exp string
 	}{
-		{[]rune{}, 0, 0, []rune{}},
-		{[]rune{'a', 'b', 'c', 'd'}, 1, 3, []rune{'b', 'c'}},
-		{[]rune{'a', 'ı', 'b', 'ş'}, 1, 3, []rune{'ı', 'b'}},
-		{[]rune{'世', '界', '世', '界'}, 2, 6, []rune{'界', '世'}},
-		{[]rune{'世', '界', '世', '界'}, 3, 6, []rune{'世'}},
-		{[]rune{'世', '界', '世', '界'}, 2, 5, []rune{'界'}},
-		{[]rune{'世', '界', '世', '界'}, 3, 5, []rune{}},
-		{[]rune{'世', '界', '世', '界'}, 4, 4, []rune{}},
-		{[]rune{'世', '界', '世', '界'}, 5, 5, []rune{}},
-		{[]rune{'世', '界', '世', '界'}, 4, 7, []rune{'世'}},
-		{[]rune{'世', '界', '世', '界'}, 4, 8, []rune{'世', '界'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 2, 5, []rune{'a', '界'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 2, 4, []rune{'a'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 3, 5, []rune{'界'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 3, 4, []rune{}},
-		{[]rune{'世', 'a', '界', 'ı'}, 3, 3, []rune{}},
-		{[]rune{'世', 'a', '界', 'ı'}, 4, 4, []rune{}},
-		{[]rune{'世', 'a', '界', 'ı'}, 4, 6, []rune{'ı'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 5, 6, []rune{'ı'}},
+		{"", ""},
+		{"a", "a"},
+		{"世界", "界"},
+		{"a🏳️", "🏳️"},
 	}
 
 	for _, test := range tests {
-		if got := runeSliceWidthRange(test.rs, test.beg, test.end); !reflect.DeepEqual(got, test.exp) {
-			t.Errorf("at input '%v' expected '%v' but got '%v'", test.rs, test.exp, got)
+		if got := lastGraphemeCluster(test.s); got != test.exp {
+			t.Errorf("at input '%v' expected '%v' but got '%v'", test.s, test.exp, got)
 		}
 	}
 }
 
-func TestRuneSliceWidthLastRange(t *testing.T) {
+func TestTruncateRight(t *testing.T) {
 	tests := []struct {
-		rs       []rune
+		s        string
 		maxWidth int
-		exp      []rune
+		exp      string
 	}{
-		{[]rune{}, 0, []rune{}},
-		{[]rune{}, 1, []rune{}},
-		{[]rune{'a', 'ı', 'b', ' '}, 0, []rune{}},
-		{[]rune{'a', 'ı', 'b', ' '}, 1, []rune{' '}},
-		{[]rune{'a', 'ı', 'b', ' '}, 2, []rune{'b', ' '}},
-		{[]rune{'a', 'ı', 'b', ' '}, 3, []rune{'ı', 'b', ' '}},
-		{[]rune{'a', 'ı', 'b', ' '}, 4, []rune{'a', 'ı', 'b', ' '}},
-		{[]rune{'a', 'ı', 'b', ' '}, 5, []rune{'a', 'ı', 'b', ' '}},
-		{[]rune{'世', '界', '世', '界'}, 0, []rune{}},
-		{[]rune{'世', '界', '世', '界'}, 1, []rune{}},
-		{[]rune{'世', '界', '世', '界'}, 2, []rune{'界'}},
-		{[]rune{'世', '界', '世', '界'}, 3, []rune{'界'}},
-		{[]rune{'世', '界', '世', '界'}, 4, []rune{'世', '界'}},
-		{[]rune{'世', '界', '世', '界'}, 5, []rune{'世', '界'}},
-		{[]rune{'世', '界', '世', '界'}, 6, []rune{'界', '世', '界'}},
-		{[]rune{'世', '界', '世', '界'}, 7, []rune{'界', '世', '界'}},
-		{[]rune{'世', '界', '世', '界'}, 8, []rune{'世', '界', '世', '界'}},
-		{[]rune{'世', '界', '世', '界'}, 9, []rune{'世', '界', '世', '界'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 0, []rune{}},
-		{[]rune{'世', 'a', '界', 'ı'}, 1, []rune{'ı'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 2, []rune{'ı'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 3, []rune{'界', 'ı'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 4, []rune{'a', '界', 'ı'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 5, []rune{'a', '界', 'ı'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 6, []rune{'世', 'a', '界', 'ı'}},
-		{[]rune{'世', 'a', '界', 'ı'}, 7, []rune{'世', 'a', '界', 'ı'}},
+		{"", 0, ""},
+		{"", 1, ""},
+		{"a", 0, ""},
+		{"a", 1, "a"},
+		{"ab", 1, "a"},
+		{"世", 0, ""},
+		{"世", 1, ""},
+		{"世界", 2, "世"},
+		{"世界", 3, "世"},
+		{"a🏳️b", 2, "a"},
+		{"a🏳️b", 3, "a🏳️"},
+		{"a🏳️b", 4, "a🏳️b"},
 	}
 
 	for _, test := range tests {
-		if got := runeSliceWidthLastRange(test.rs, test.maxWidth); !reflect.DeepEqual(got, test.exp) {
-			t.Errorf("at input '%v' expected '%v' but got '%v'", test.rs, test.exp, got)
+		if got := truncateRight(test.s, test.maxWidth); got != test.exp {
+			t.Errorf("at input ('%v', %v) expected '%v' but got '%v'", test.s, test.maxWidth, test.exp, got)
+		}
+	}
+}
+
+func TestTruncateLeft(t *testing.T) {
+	tests := []struct {
+		s        string
+		maxWidth int
+		exp      string
+	}{
+		{"", 0, ""},
+		{"", 1, ""},
+		{"a", 0, ""},
+		{"a", 1, "a"},
+		{"ab", 1, "b"},
+		{"世", 0, ""},
+		{"世", 1, ""},
+		{"世界", 2, "界"},
+		{"世界", 3, "界"},
+		{"a🏳️b", 2, "b"},
+		{"a🏳️b", 3, "🏳️b"},
+		{"a🏳️b", 4, "a🏳️b"},
+	}
+
+	for _, test := range tests {
+		if got := truncateLeft(test.s, test.maxWidth); got != test.exp {
+			t.Errorf("at input ('%v', %v) expected '%v' but got '%v'", test.s, test.maxWidth, test.exp, got)
 		}
 	}
 }
@@ -255,7 +251,7 @@ func TestReadArrays(t *testing.T) {
 
 func TestHumanize(t *testing.T) {
 	tests := []struct {
-		size     uint64
+		size     int64
 		expected string
 	}{
 		{0, "0B"},
@@ -298,7 +294,7 @@ func TestHumanize(t *testing.T) {
 	}
 
 	tests = []struct {
-		size     uint64
+		size     int64
 		expected string
 	}{
 		{0, "0B"},
@@ -502,7 +498,7 @@ func TestTruncateFilename(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if got := truncateFilename(test.file, test.maxWidth, test.truncatePct, '~'); got != test.exp {
+		if got := truncateFilename(test.file, test.maxWidth, test.truncatePct, "~"); got != test.exp {
 			t.Errorf("at input (%v, %v, %v) expected '%s' but got '%s'", test.file, test.maxWidth, test.truncatePct, test.exp, got)
 		}
 	}
@@ -533,9 +529,9 @@ func TestReadLines(t *testing.T) {
 		{"foo\r\n\000\r\nbar\r\n", 10, nil, true, false},
 		{"\033P\033\\", 10, []string{"\033P\033\\"}, false, true},
 		{"\033Pq\"1;1;1;1#0@\033\\", 10, []string{"\033Pq\"1;1;1;1#0@\033\\"}, false, true},
-		{"\033P\000\033\\", 10, []string{"\033P\000\033\\"}, false, true},
-		{"\033P\n\033\\", 10, []string{"\033P\n\033\\"}, false, true},
-		{"\033P\r\n\033\\", 10, []string{"\033P\r\n\033\\"}, false, true},
+		{"\033P\000\033\\", 10, []string{"\033\\"}, false, false},
+		{"\033P\n\033\\", 10, []string{"\033P\033\\"}, false, true},
+		{"\033P\r\n\033\\", 10, []string{"\033P\033\\"}, false, true},
 		{"\033P\033\\\033P\033\\", 10, []string{"\033P\033\\", "\033P\033\\"}, false, true},
 		{"foo\033P\033\\bar", 10, []string{"foo", "\033P\033\\", "bar"}, false, true},
 		{"foo\033P\033\\bar\033P\033\\baz", 10, []string{"foo", "\033P\033\\", "bar", "\033P\033\\", "baz"}, false, true},
@@ -545,6 +541,10 @@ func TestReadLines(t *testing.T) {
 		{"foo\nbar\nbaz", 3, []string{"foo", "bar", "baz"}, false, false},
 		{"foo\nbar\nbaz\n", 3, []string{"foo", "bar", "baz"}, false, false},
 		{"foo\nbar\033P\033\\", 3, []string{"foo", "bar", "\033P\033\\"}, false, true},
+		// Inside the DCS body, ESC must be followed by '\\' (ST) for the
+		// frame to be accepted. Any other byte aborts, so an attacker
+		// cannot embed CSI/OSC/nested-DCS through the sixel path.
+		{"\033P\033]52;c;x\033\\", 10, []string{"52;c;x\033\\"}, false, false},
 	}
 
 	for _, test := range tests {
@@ -562,27 +562,35 @@ func TestReadLines(t *testing.T) {
 
 func TestGetWidths(t *testing.T) {
 	tests := []struct {
-		wtot    int
-		ratios  []int
-		drawbox bool
-		exp     []int
+		wtot        int
+		ratios      []int
+		drawbox     bool
+		borderstyle borderStyle
+		exp         []int
 	}{
-		{0, []int{1}, false, []int{0}},
-		{0, []int{1}, true, []int{0}},
-		{0, []int{1, 3, 2}, false, []int{0, 0, 0}},
-		{0, []int{1, 3, 2}, true, []int{0, 0, 0}},
-		{14, []int{1, 3, 2}, false, []int{2, 6, 4}},
-		{16, []int{1, 3, 2}, true, []int{2, 6, 4}},
-		{23, []int{1, 3, 2, 4}, false, []int{2, 6, 4, 8}}, // windows end at 2.0, 8.0, 12.0, 20.0 respectively
-		{24, []int{1, 3, 2, 4}, false, []int{2, 6, 5, 8}}, // windows end at 2.1, 8.4, 12.6, 21.0 respectively
-		{25, []int{1, 3, 2, 4}, false, []int{2, 7, 4, 9}}, // windows end at 2.2, 8.8, 13.2, 22.0 respectively
-		{26, []int{1, 3, 2, 4}, false, []int{2, 7, 5, 9}}, // windows end at 2.3, 9.2, 13.8, 23.0 respectively
+		{0, []int{1}, false, borderBox, []int{0}},
+		{0, []int{1}, true, borderBox, []int{0}},
+		{0, []int{1, 3, 2}, false, borderBox, []int{0, 0, 0}},
+		{0, []int{1, 3, 2}, true, borderBox, []int{0, 0, 0}},
+
+		{14, []int{1, 3, 2}, false, borderBox, []int{2, 6, 4}},
+		{16, []int{1, 3, 2}, true, borderBox, []int{2, 6, 4}},
+
+		{16, []int{1, 3, 2}, true, borderSeparators, []int{2, 7, 5}},
+		{16, []int{1, 3, 2}, true, borderOutline, []int{2, 6, 4}},
+		{16, []int{1, 3, 2}, true, borderRoundOutline, []int{2, 6, 4}},
+		{16, []int{1, 3, 2}, true, borderRoundBox, []int{2, 6, 4}},
+
+		{23, []int{1, 3, 2, 4}, false, borderBox, []int{2, 6, 4, 8}}, // windows end at 2.0, 8.0, 12.0, 20.0 respectively
+		{24, []int{1, 3, 2, 4}, false, borderBox, []int{2, 6, 5, 8}}, // windows end at 2.1, 8.4, 12.6, 21.0 respectively
+		{25, []int{1, 3, 2, 4}, false, borderBox, []int{2, 7, 4, 9}}, // windows end at 2.2, 8.8, 13.2, 22.0 respectively
+		{26, []int{1, 3, 2, 4}, false, borderBox, []int{2, 7, 5, 9}}, // windows end at 2.3, 9.2, 13.8, 23.0 respectively
 	}
 
 	for _, test := range tests {
-		widths := getWidths(test.wtot, test.ratios, test.drawbox)
+		widths := getWidths(test.wtot, test.ratios, test.drawbox, test.borderstyle)
 		if !reflect.DeepEqual(widths, test.exp) {
-			t.Errorf("at input (%v, %v, %v) expected %v but got %v", test.wtot, test.ratios, test.drawbox, test.exp, widths)
+			t.Errorf("at input (%v, %v, %v, %v) expected %v but got %v", test.wtot, test.ratios, test.drawbox, test.borderstyle, test.exp, widths)
 		}
 	}
 }

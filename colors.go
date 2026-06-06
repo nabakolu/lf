@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/gdamore/tcell/v3"
 )
 
 type styleMap struct {
@@ -94,26 +94,26 @@ func parseColor(toks []string) (tcell.Color, int, error) {
 	}
 
 	if toks[0] == "5" && len(toks) >= 2 {
-		n, err := strconv.Atoi(toks[1])
+		n, err := strconv.ParseUint(toks[1], 10, 8)
 		if err != nil {
 			return tcell.ColorDefault, 0, fmt.Errorf("invalid args: %v", toks)
 		}
 
-		return tcell.PaletteColor(n), 2, nil
+		return tcell.PaletteColor(int(n)), 2, nil
 	}
 
 	if toks[0] == "2" && len(toks) >= 4 {
-		r, err := strconv.Atoi(toks[1])
+		r, err := strconv.ParseUint(toks[1], 10, 8)
 		if err != nil {
 			return tcell.ColorDefault, 0, fmt.Errorf("invalid args: %v", toks)
 		}
 
-		g, err := strconv.Atoi(toks[2])
+		g, err := strconv.ParseUint(toks[2], 10, 8)
 		if err != nil {
 			return tcell.ColorDefault, 0, fmt.Errorf("invalid args: %v", toks)
 		}
 
-		b, err := strconv.Atoi(toks[3])
+		b, err := strconv.ParseUint(toks[3], 10, 8)
 		if err != nil {
 			return tcell.ColorDefault, 0, fmt.Errorf("invalid args: %v", toks)
 		}
@@ -259,7 +259,7 @@ func (sm styleMap) get(f *file) tcell.Style {
 		key = "su"
 	case f.Mode()&os.ModeSetgid != 0:
 		key = "sg"
-	case f.Mode()&0o111 != 0:
+	case isExecutable(f.FileInfo):
 		key = "ex"
 	}
 

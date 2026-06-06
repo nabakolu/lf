@@ -2,155 +2,27 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 	"text/template"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
-	"github.com/gdamore/tcell/v2"
-	"github.com/mattn/go-runewidth"
+	"github.com/clipperhouse/displaywidth"
+	"github.com/gdamore/tcell/v3"
 	"golang.org/x/term"
 )
 
-var gKeyVal = map[tcell.Key]string{
-	tcell.KeyEnter:          "<enter>",
-	tcell.KeyBackspace:      "<backspace>",
-	tcell.KeyTab:            "<tab>",
-	tcell.KeyBacktab:        "<backtab>",
-	tcell.KeyEsc:            "<esc>",
-	tcell.KeyBackspace2:     "<backspace2>",
-	tcell.KeyDelete:         "<delete>",
-	tcell.KeyInsert:         "<insert>",
-	tcell.KeyUp:             "<up>",
-	tcell.KeyDown:           "<down>",
-	tcell.KeyLeft:           "<left>",
-	tcell.KeyRight:          "<right>",
-	tcell.KeyHome:           "<home>",
-	tcell.KeyEnd:            "<end>",
-	tcell.KeyUpLeft:         "<upleft>",
-	tcell.KeyUpRight:        "<upright>",
-	tcell.KeyDownLeft:       "<downleft>",
-	tcell.KeyDownRight:      "<downright>",
-	tcell.KeyCenter:         "<center>",
-	tcell.KeyPgDn:           "<pgdn>",
-	tcell.KeyPgUp:           "<pgup>",
-	tcell.KeyClear:          "<clear>",
-	tcell.KeyExit:           "<exit>",
-	tcell.KeyCancel:         "<cancel>",
-	tcell.KeyPause:          "<pause>",
-	tcell.KeyPrint:          "<print>",
-	tcell.KeyF1:             "<f-1>",
-	tcell.KeyF2:             "<f-2>",
-	tcell.KeyF3:             "<f-3>",
-	tcell.KeyF4:             "<f-4>",
-	tcell.KeyF5:             "<f-5>",
-	tcell.KeyF6:             "<f-6>",
-	tcell.KeyF7:             "<f-7>",
-	tcell.KeyF8:             "<f-8>",
-	tcell.KeyF9:             "<f-9>",
-	tcell.KeyF10:            "<f-10>",
-	tcell.KeyF11:            "<f-11>",
-	tcell.KeyF12:            "<f-12>",
-	tcell.KeyF13:            "<f-13>",
-	tcell.KeyF14:            "<f-14>",
-	tcell.KeyF15:            "<f-15>",
-	tcell.KeyF16:            "<f-16>",
-	tcell.KeyF17:            "<f-17>",
-	tcell.KeyF18:            "<f-18>",
-	tcell.KeyF19:            "<f-19>",
-	tcell.KeyF20:            "<f-20>",
-	tcell.KeyF21:            "<f-21>",
-	tcell.KeyF22:            "<f-22>",
-	tcell.KeyF23:            "<f-23>",
-	tcell.KeyF24:            "<f-24>",
-	tcell.KeyF25:            "<f-25>",
-	tcell.KeyF26:            "<f-26>",
-	tcell.KeyF27:            "<f-27>",
-	tcell.KeyF28:            "<f-28>",
-	tcell.KeyF29:            "<f-29>",
-	tcell.KeyF30:            "<f-30>",
-	tcell.KeyF31:            "<f-31>",
-	tcell.KeyF32:            "<f-32>",
-	tcell.KeyF33:            "<f-33>",
-	tcell.KeyF34:            "<f-34>",
-	tcell.KeyF35:            "<f-35>",
-	tcell.KeyF36:            "<f-36>",
-	tcell.KeyF37:            "<f-37>",
-	tcell.KeyF38:            "<f-38>",
-	tcell.KeyF39:            "<f-39>",
-	tcell.KeyF40:            "<f-40>",
-	tcell.KeyF41:            "<f-41>",
-	tcell.KeyF42:            "<f-42>",
-	tcell.KeyF43:            "<f-43>",
-	tcell.KeyF44:            "<f-44>",
-	tcell.KeyF45:            "<f-45>",
-	tcell.KeyF46:            "<f-46>",
-	tcell.KeyF47:            "<f-47>",
-	tcell.KeyF48:            "<f-48>",
-	tcell.KeyF49:            "<f-49>",
-	tcell.KeyF50:            "<f-50>",
-	tcell.KeyF51:            "<f-51>",
-	tcell.KeyF52:            "<f-52>",
-	tcell.KeyF53:            "<f-53>",
-	tcell.KeyF54:            "<f-54>",
-	tcell.KeyF55:            "<f-55>",
-	tcell.KeyF56:            "<f-56>",
-	tcell.KeyF57:            "<f-57>",
-	tcell.KeyF58:            "<f-58>",
-	tcell.KeyF59:            "<f-59>",
-	tcell.KeyF60:            "<f-60>",
-	tcell.KeyF61:            "<f-61>",
-	tcell.KeyF62:            "<f-62>",
-	tcell.KeyF63:            "<f-63>",
-	tcell.KeyF64:            "<f-64>",
-	tcell.KeyCtrlA:          "<c-a>",
-	tcell.KeyCtrlB:          "<c-b>",
-	tcell.KeyCtrlC:          "<c-c>",
-	tcell.KeyCtrlD:          "<c-d>",
-	tcell.KeyCtrlE:          "<c-e>",
-	tcell.KeyCtrlF:          "<c-f>",
-	tcell.KeyCtrlG:          "<c-g>",
-	tcell.KeyCtrlJ:          "<c-j>",
-	tcell.KeyCtrlK:          "<c-k>",
-	tcell.KeyCtrlL:          "<c-l>",
-	tcell.KeyCtrlN:          "<c-n>",
-	tcell.KeyCtrlO:          "<c-o>",
-	tcell.KeyCtrlP:          "<c-p>",
-	tcell.KeyCtrlQ:          "<c-q>",
-	tcell.KeyCtrlR:          "<c-r>",
-	tcell.KeyCtrlS:          "<c-s>",
-	tcell.KeyCtrlT:          "<c-t>",
-	tcell.KeyCtrlU:          "<c-u>",
-	tcell.KeyCtrlV:          "<c-v>",
-	tcell.KeyCtrlW:          "<c-w>",
-	tcell.KeyCtrlX:          "<c-x>",
-	tcell.KeyCtrlY:          "<c-y>",
-	tcell.KeyCtrlZ:          "<c-z>",
-	tcell.KeyCtrlSpace:      "<c-space>",
-	tcell.KeyCtrlUnderscore: "<c-_>",
-	tcell.KeyCtrlRightSq:    "<c-]>",
-	tcell.KeyCtrlBackslash:  "<c-\\>",
-	tcell.KeyCtrlCarat:      "<c-^>",
-}
-
-var gValKey map[string]tcell.Key
-
-func init() {
-	gValKey = make(map[string]tcell.Key, len(gKeyVal))
-	for k, v := range gKeyVal {
-		gValKey[v] = k
-	}
-}
+const previewLoadingDelay = 100 * time.Millisecond
 
 type win struct {
 	w, h, x, y int
@@ -164,74 +36,81 @@ func (win *win) renew(w, h, x, y int) {
 	win.w, win.h, win.x, win.y = w, h, x, y
 }
 
+// firstGrapheme returns the first grapheme cluster in s and its display width.
+func firstGrapheme(s string) (string, int) {
+	gr := displaywidth.StringGraphemes(s)
+	if !gr.Next() {
+		return "", 0
+	}
+	return gr.Value(), gr.Width()
+}
+
 // printLength returns the display width of s in terminal cells.
 //
 // It ignores supported terminal control sequences (see [readTermSequence])
 // and accounts for tab expansions using the `tabstop` option.
 func printLength(s string) int {
-	ind := 0
-	off := 0
+	length := 0
+
 	slen := len(s)
-	for i := 0; i < slen; i++ {
+	for i := 0; i < slen; {
 		seq := readTermSequence(s[i:])
 		if seq != "" {
-			i += len(seq) - 1
+			i += len(seq)
 			continue
 		}
 
-		r, w := utf8.DecodeRuneInString(s[i:])
-		i += w - 1
+		gc, w := firstGrapheme(s[i:])
+		i += len(gc)
 
-		if r == '\t' {
-			ind += gOpts.tabstop - (ind-off)%gOpts.tabstop
+		if gc == "\t" {
+			length += gOpts.tabstop - length%gOpts.tabstop
+		} else if isPrintable(gc) {
+			length += w
 		} else {
-			ind += runewidth.RuneWidth(r)
+			length++ // U+FFFD replacement has width 1
 		}
 	}
 
-	return ind
+	return length
 }
 
 func (win *win) print(screen tcell.Screen, x, y int, st tcell.Style, s string) tcell.Style {
-	off := x
-	var comb []rune
-	slen := len(s)
-	for i := 0; i < slen; i++ {
-		seq := readTermSequence(s[i:])
-		if seq != "" {
-			st = applyTermSequence(seq, st)
-			i += len(seq) - 1
-			continue
-		}
-
-		r, w := utf8.DecodeRuneInString(s[i:])
-		for {
-			rc, wc := utf8.DecodeRuneInString(s[i+w:])
-			if !unicode.Is(unicode.Mn, rc) {
-				break
-			}
-			comb = append(comb, rc)
-			i += wc
-		}
-
-		if x < win.w {
-			screen.SetContent(win.x+x, win.y+y, r, comb, st)
-			comb = nil
-		}
-
-		i += w - 1
-
-		if r == '\t' {
-			ind := gOpts.tabstop - (x-off)%gOpts.tabstop
-			for i := 0; i < ind && x+i < win.w; i++ {
-				screen.SetContent(win.x+x+i, win.y+y, ' ', nil, st)
-			}
-			x += ind
-		} else {
-			x += runewidth.RuneWidth(r)
+	var b strings.Builder
+	off := 0
+	put := func() {
+		if b.Len() > 0 {
+			s := b.String()
+			screen.PutStrStyled(win.x+x+off, win.y+y, s, st)
+			off += printLength(s)
+			b.Reset()
 		}
 	}
 
+	slen := len(s)
+	for i := 0; i < slen; {
+		seq := readTermSequence(s[i:])
+		if seq != "" {
+			put()
+			st = applyTermSequence(seq, st)
+			i += len(seq)
+			continue
+		}
+
+		gc := firstGraphemeCluster(s[i:])
+		if gc == "\t" {
+			w := gOpts.tabstop - (x+off+printLength(b.String()))%gOpts.tabstop
+			b.WriteString(strings.Repeat(" ", w))
+		} else if isPrintable(gc) {
+			b.WriteString(gc)
+		} else {
+			b.WriteString("\uFFFD")
+		}
+
+		i += len(gc)
+	}
+
+	put()
 	return st
 }
 
@@ -247,12 +126,22 @@ func (win *win) printRight(screen tcell.Screen, y int, st tcell.Style, s string)
 	win.print(screen, win.w-printLength(s), y, st, s)
 }
 
-func (win *win) printReg(screen tcell.Screen, reg *reg, previewLoading bool, sxs *sixelScreen) {
+func (win *win) printMsg(screen tcell.Screen, s string) {
+	pad := 1
+	if gOpts.mergeindicators {
+		pad--
+	}
+	st := tcell.StyleDefault.Reverse(true)
+	win.print(screen, pad, 0, st, s)
+}
+
+func (win *win) printReg(screen tcell.Screen, reg *reg, sxs *sixelScreen, previewTimer *time.Timer) {
 	switch {
 	case reg.loading:
-		if previewLoading {
-			st := tcell.StyleDefault.Reverse(true)
-			win.print(screen, 2, 0, st, "loading...")
+		if time.Since(reg.loadTime) > previewLoadingDelay {
+			win.printMsg(screen, "loading...")
+		} else {
+			previewTimer.Reset(previewLoadingDelay)
 		}
 	case reg.sixel:
 		sxs.printSixel(win, screen, reg)
@@ -291,21 +180,21 @@ func fileInfo(f *file, d *dir, userWidth, groupWidth, customWidth int) (string, 
 		case "size":
 			if f.IsDir() && getDirCounts(d.path) {
 				switch {
-				case f.dirCount == nil:
-					info.WriteString("     ?")
-				case *f.dirCount < 10000:
-					fmt.Fprintf(&info, " %5d", *f.dirCount)
+				case f.dirCount < 0:
+					info.WriteString("     !")
+				case f.dirCount < 10000:
+					fmt.Fprintf(&info, " %5d", f.dirCount)
 				default:
 					info.WriteString(" 9999+")
 				}
 			} else {
 				switch {
-				case f.dirSize != nil:
-					fmt.Fprintf(&info, " %5s", humanize(*f.dirSize))
+				case f.dirSize >= 0:
+					fmt.Fprintf(&info, " %5s", humanize(f.dirSize))
 				case f.IsDir():
 					info.WriteString("     -")
 				default:
-					fmt.Fprintf(&info, " %5s", humanize(uint64(f.Size())))
+					fmt.Fprintf(&info, " %5s", humanize(f.Size()))
 				}
 			}
 		case "time":
@@ -361,25 +250,26 @@ type dirStyle struct {
 	role   dirRole
 }
 
-func (win *win) printDir(ui *ui, dir *dir, context *dirContext, dirStyle *dirStyle) {
+func (win *win) printDir(ui *ui, dir *dir, context *dirContext, dirStyle *dirStyle, previewTimer *time.Timer) {
 	if win.w < 5 || dir == nil {
 		return
 	}
 
-	messageStyle := tcell.StyleDefault.Reverse(true)
-
-	if dir.noPerm {
-		win.print(ui.screen, 2, 0, messageStyle, "permission denied")
-		return
-	}
 	fileslen := len(dir.files)
-	if dir.loading && fileslen == 0 {
-		win.print(ui.screen, 2, 0, messageStyle, "loading...")
-		return
-	}
 
-	if fileslen == 0 {
-		win.print(ui.screen, 2, 0, messageStyle, "empty")
+	switch {
+	case dir.loading && fileslen == 0:
+		if time.Since(dir.loadTime) > previewLoadingDelay {
+			win.printMsg(ui.screen, "loading...")
+		} else {
+			previewTimer.Reset(previewLoadingDelay)
+		}
+		return
+	case dir.noPerm:
+		win.printMsg(ui.screen, "permission denied")
+		return
+	case fileslen == 0:
+		win.printMsg(ui.screen, "empty")
 		return
 	}
 
@@ -450,7 +340,11 @@ func (win *win) printDir(ui *ui, dir *dir, context *dirContext, dirStyle *dirSty
 				}
 			}
 
-			win.print(ui.screen, 0, i, tcell.StyleDefault, fmt.Sprintf(optionToFmtstr(gOpts.numberfmt), ln))
+			fmtStr := optionToFmtstr(gOpts.numberfmt)
+			if i == dir.pos && gOpts.numbercursorfmt != "" {
+				fmtStr = optionToFmtstr(gOpts.numbercursorfmt)
+			}
+			win.print(ui.screen, 0, i, tcell.StyleDefault, fmt.Sprintf(fmtStr, ln))
 		}
 
 		path := filepath.Join(dir.path, f.Name())
@@ -484,15 +378,15 @@ func (win *win) printDir(ui *ui, dir *dir, context *dirContext, dirStyle *dirSty
 		// make space for select marker, and leave another space at the end
 		maxWidth := win.w - lnwidth - 2
 
-		var icon []rune
+		var icon string
 		var iconDef iconDef
 		if gOpts.icons {
 			iconDef = dirStyle.icons.get(f)
-			icon = slices.Concat([]rune(iconDef.icon), []rune{' '})
+			icon = iconDef.icon + " "
 		}
 
 		// subtract space for icon
-		maxFilenameWidth := maxWidth - runeSliceWidth(icon)
+		maxFilenameWidth := maxWidth - displaywidth.String(icon)
 		// subtract space for tag if not merged with selection marker
 		if !gOpts.mergeindicators {
 			maxFilenameWidth--
@@ -505,14 +399,15 @@ func (win *win) printDir(ui *ui, dir *dir, context *dirContext, dirStyle *dirSty
 			maxFilenameWidth -= infolen
 		}
 
-		filename := []rune(truncateFilename(f, maxFilenameWidth, gOpts.truncatepct, []rune(gOpts.truncatechar)[0]))
-		for j := runeSliceWidth(filename); j < maxFilenameWidth; j++ {
-			filename = append(filename, ' ')
+		filename := truncateFilename(f, maxFilenameWidth, gOpts.truncatepct, gOpts.truncatechar)
+		spacing := maxFilenameWidth - displaywidth.String(filename)
+		if spacing > 0 {
+			filename += strings.Repeat(" ", spacing)
 		}
 
 		if showInfo {
-			filename = append(filename, []rune(info)...)
-			customOff += nameOff + runeSliceWidth(icon) + maxFilenameWidth
+			filename += info
+			customOff += nameOff + displaywidth.String(icon) + maxFilenameWidth
 		}
 
 		if i == dir.pos {
@@ -531,8 +426,7 @@ func (win *win) printDir(ui *ui, dir *dir, context *dirContext, dirStyle *dirSty
 				win.print(ui.screen, tagOff, i, st, fmt.Sprintf(cursorFmt, tag))
 			}
 
-			line := slices.Concat(icon, filename, []rune{' '})
-			win.print(ui.screen, nameOff, i, st, fmt.Sprintf(cursorFmt, string(line)))
+			win.print(ui.screen, nameOff, i, st, fmt.Sprintf(cursorFmt, icon+filename+" "))
 
 			// print over the empty space we reserved for the custom info
 			if showInfo && custom != "" {
@@ -553,11 +447,10 @@ func (win *win) printDir(ui *ui, dir *dir, context *dirContext, dirStyle *dirSty
 				if iconDef.hasStyle {
 					iconStyle = iconDef.style
 				}
-				win.print(ui.screen, nameOff, i, iconStyle, string(icon))
+				win.print(ui.screen, nameOff, i, iconStyle, icon)
 			}
 
-			line := slices.Concat(filename, []rune{' '})
-			win.print(ui.screen, nameOff+runeSliceWidth(icon), i, st, string(line))
+			win.print(ui.screen, nameOff+displaywidth.String(icon), i, st, filename+" ")
 
 			// print over the empty space we reserved for the custom info
 			if showInfo && custom != "" {
@@ -601,15 +494,13 @@ func getWins(screen tcell.Screen) []*win {
 	wtot, htot := screen.Size()
 
 	h := max(htot-2, 0)
-	x := 0
-	y := 1
-	if gOpts.drawbox {
+	x, y := 0, 1
+	if gOpts.drawbox && gOpts.borderstyle&borderOutline != 0 {
 		h = max(htot-4, 0)
-		x = 1
-		y = 2
+		x, y = 1, 2
 	}
 
-	widths := getWidths(wtot, gOpts.ratios, gOpts.drawbox)
+	widths := getWidths(wtot, gOpts.ratios, gOpts.drawbox, gOpts.borderstyle)
 	wins := make([]*win, 0, len(widths))
 	for _, w := range widths {
 		wins = append(wins, newWin(w, h, x, y))
@@ -620,37 +511,34 @@ func getWins(screen tcell.Screen) []*win {
 }
 
 type menuSelect struct {
-	x, y int
-	s    string
+	x, y int    // selection position in menuWin (cells)
+	s    string // selected entry text to draw with `menuselectfmt`
 }
 
 type ui struct {
-	screen      tcell.Screen
-	sxScreen    sixelScreen
-	polling     bool
-	wins        []*win
-	promptWin   *win
-	msgWin      *win
-	menuWin     *win
-	msg         string
-	exprChan    chan expr
-	keyChan     chan string
-	tevChan     chan tcell.Event
-	evChan      chan tcell.Event
-	menu        string
-	menuSelect  *menuSelect
-	cmdPrefix   string
-	cmdAccLeft  []rune
-	cmdAccRight []rune
-	cmdYankBuf  []rune
-	keyAcc      []rune
-	keyCount    []rune
-	styles      styleMap
-	icons       iconMap
-	ruler       *template.Template
-	rulerErr    error
-	currentFile string
-	pasteEvent  bool
+	screen      tcell.Screen       // primary screen used for drawing and event polling
+	sxScreen    sixelScreen        // sixel preview state
+	wins        []*win             // pane windows from `ratios` (last is `preview` when enabled)
+	promptWin   *win               // prompt line window
+	msgWin      *win               // status line window
+	menuWin     *win               // menu window
+	msg         string             // message/output shown in msgWin
+	exprChan    chan expr          // expr queue
+	evChan      chan tcell.Event   // merged event queue (keyChan + tevChan)
+	menu        string             // rendered (multiline) menu text (i.e. completions, binds, marks)
+	menuSelect  *menuSelect        // selected menu entry (completion menu only)
+	cmdPrefix   string             // command prefix/prompt (empty: Normal mode)
+	cmdAccLeft  string             // command buffer left of cursor
+	cmdAccRight string             // command buffer right of cursor
+	cmdYankBuf  string             // yank buffer for command line editing
+	keyAcc      string             // keys typed so far for mapping lookup
+	keyCount    string             // count prefix for next command
+	styles      styleMap           // parsed styles
+	icons       iconMap            // parsed icons
+	ruler       *template.Template // compiled `rulerfile`
+	rulerErr    error              // `rulerfile` parse error (if any)
+	currentFile string             // last path passed to `on-select`
+	pasteEvent  bool               // whether paste event is active (to ignore pasted input in Normal mode)
 }
 
 func newUI(screen tcell.Screen) *ui {
@@ -658,14 +546,11 @@ func newUI(screen tcell.Screen) *ui {
 
 	ui := &ui{
 		screen:      screen,
-		polling:     true,
 		wins:        getWins(screen),
 		promptWin:   newWin(wtot, 1, 0, 0),
 		msgWin:      newWin(wtot, 1, 0, htot-1),
 		menuWin:     newWin(wtot, 1, 0, htot-2),
 		exprChan:    make(chan expr, 1000),
-		keyChan:     make(chan string, 1000),
-		tevChan:     make(chan tcell.Event, 1000),
 		evChan:      make(chan tcell.Event, 1000),
 		styles:      parseStyles(),
 		icons:       parseIcons(),
@@ -673,8 +558,6 @@ func newUI(screen tcell.Screen) *ui {
 		sxScreen:    sixelScreen{},
 	}
 	ui.ruler, ui.rulerErr = parseRuler(gOpts.rulerfile)
-
-	go ui.pollEvents()
 
 	return ui
 }
@@ -687,18 +570,6 @@ func (ui *ui) winAt(x, y int) (int, *win) {
 		}
 	}
 	return -1, nil
-}
-
-func (ui *ui) pollEvents() {
-	var ev tcell.Event
-	for {
-		ev = ui.screen.PollEvent()
-		if ev == nil {
-			ui.polling = false
-			return
-		}
-		ui.tevChan <- ev
-	}
 }
 
 func (ui *ui) renew() {
@@ -715,12 +586,12 @@ func (ui *ui) echo(msg string) {
 }
 
 func (ui *ui) echomsg(msg string) {
-	ui.echo(msg)
+	ui.echo(sanitizeMessage(msg))
 	log.Print(msg)
 }
 
 func (ui *ui) echoerr(msg string) {
-	ui.echo(fmt.Sprintf(optionToFmtstr(gOpts.errorfmt), msg))
+	ui.echo(fmt.Sprintf(optionToFmtstr(gOpts.errorfmt), sanitizeName(msg)))
 	log.Printf("error: %s", msg)
 }
 
@@ -741,9 +612,14 @@ type reg struct {
 	path     string
 	lines    []string
 	sixel    bool
+	height   int
 }
 
 func (ui *ui) loadFile(app *app, volatile bool) {
+	if volatile {
+		app.nav.previewChan <- ""
+	}
+
 	curr := app.nav.currFile()
 	if curr == nil {
 		return
@@ -752,10 +628,6 @@ func (ui *ui) loadFile(app *app, volatile bool) {
 	if curr.path != ui.currentFile {
 		ui.currentFile = curr.path
 		onSelect(app)
-	}
-
-	if volatile {
-		app.nav.previewChan <- ""
 	}
 
 	if !gOpts.preview {
@@ -774,7 +646,7 @@ func (ui *ui) drawPromptLine(nav *nav) {
 	st := tcell.StyleDefault
 
 	dir := nav.currDir()
-	pwd := dir.path
+	pwd := sanitizeName(dir.path)
 
 	if after, ok := strings.CutPrefix(pwd, gUser.HomeDir); ok {
 		pwd = filepath.Join("~", after)
@@ -784,7 +656,7 @@ func (ui *ui) drawPromptLine(nav *nav) {
 
 	var fname string
 	if curr := nav.currFile(); curr != nil {
-		fname = filepath.Base(curr.path)
+		fname = sanitizeName(filepath.Base(curr.path))
 	}
 
 	var prompt string
@@ -830,18 +702,20 @@ func (ui *ui) drawPromptLine(nav *nav) {
 	ui.promptWin.print(ui.screen, 0, 0, st, prompt)
 }
 
+// Deprecated: Only called by drawRuler, which will eventually be replaced by drawRulerFile
 func formatRulerOpt(name, val string) string {
 	// handle escape character so it doesn't mess up the ruler
 	val = strings.ReplaceAll(val, "\033", "\033[7m\\033\033[0m")
 
 	// display name of builtin options for clarity
 	if !strings.HasPrefix(name, "lf_user_") {
-		return fmt.Sprintf("%s=%s", strings.TrimPrefix(name, "lf_"), val)
+		return strings.TrimPrefix(name, "lf_") + "=" + val
 	}
 
 	return val
 }
 
+// Deprecated: Will eventually be replaced by drawRulerFile
 func (ui *ui) drawStat(nav *nav) {
 	if ui.msg != "" {
 		ui.msgWin.print(ui.screen, 0, 0, tcell.StyleDefault, ui.msg)
@@ -877,10 +751,10 @@ func (ui *ui) drawStat(nav *nav) {
 	replace("%c", linkCount(curr))
 	replace("%u", userName(curr))
 	replace("%g", groupName(curr))
-	replace("%s", humanize(uint64(curr.Size())))
-	replace("%S", fmt.Sprintf("%5s", humanize(uint64(curr.Size()))))
+	replace("%s", humanize(curr.Size()))
+	replace("%S", fmt.Sprintf("%5s", humanize(curr.Size())))
 	replace("%t", curr.ModTime().Format(gOpts.timefmt))
-	replace("%l", curr.linkTarget)
+	replace("%l", sanitizeName(curr.linkTarget))
 
 	var fileInfo strings.Builder
 	for section := range strings.SplitSeq(statfmt, "\x1f") {
@@ -892,6 +766,7 @@ func (ui *ui) drawStat(nav *nav) {
 	ui.msgWin.print(ui.screen, 0, 0, tcell.StyleDefault, fileInfo.String())
 }
 
+// Deprecated: Will eventually be replaced by drawRulerFile
 func (ui *ui) drawRuler(nav *nav) {
 	st := tcell.StyleDefault
 
@@ -900,7 +775,7 @@ func (ui *ui) drawRuler(nav *nav) {
 	tot := len(dir.files)
 	ind := min(dir.ind+1, tot)
 	hid := len(dir.allFiles) - tot
-	acc := string(ui.keyCount) + string(ui.keyAcc)
+	acc := ui.keyCount + ui.keyAcc
 
 	var percentage string
 	beg := max(dir.ind-dir.pos, 0)
@@ -923,67 +798,76 @@ func (ui *ui) drawRuler(nav *nav) {
 		numClipMove = len(nav.clipboard.paths)
 	}
 
-	currSelections := nav.currSelections()
-	currVSelections := nav.currDir().visualSelections()
+	numCurrSelections := len(nav.currSelections())
+	numCurrVSelections := len(nav.currDir().visualSelections())
 
-	progress := []string{}
+	var progress strings.Builder
 
 	if nav.copyJobs > 0 {
 		if nav.copyTotal == 0 {
-			progress = append(progress, fmt.Sprintf("[0%%]"))
+			progress.WriteString("[0%] ")
 		} else {
-			progress = append(progress, fmt.Sprintf("[%d%%]", nav.copyBytes*100/nav.copyTotal))
+			progress.WriteString("[" + strconv.FormatInt(nav.copyBytes*100/nav.copyTotal, 10) + "%] ")
 		}
 	}
 
 	if nav.moveTotal > 0 {
-		progress = append(progress, fmt.Sprintf("[%d/%d]", nav.moveCount, nav.moveTotal))
+		progress.WriteString("[" + strconv.Itoa(nav.moveCount) + "/" + strconv.Itoa(nav.moveTotal) + "] ")
 	}
 
 	if nav.deleteTotal > 0 {
-		progress = append(progress, fmt.Sprintf("[%d/%d]", nav.deleteCount, nav.deleteTotal))
+		progress.WriteString("[" + strconv.Itoa(nav.deleteCount) + "/" + strconv.Itoa(nav.deleteTotal) + "] ")
 	}
 
 	opts := getOptsMap()
 
 	rulerfmt := strings.ReplaceAll(gOpts.rulerfmt, "|", "\x1f")
 	rulerfmt = reRulerSub.ReplaceAllStringFunc(rulerfmt, func(s string) string {
-		var result string
+		empty := "\x00"
 		switch s {
 		case "%a":
-			result = acc
+			return cmp.Or(acc, empty)
 		case "%p":
-			result = strings.Join(progress, " ")
+			return cmp.Or(strings.TrimSuffix(progress.String(), " "), empty)
 		case "%m":
-			result = fmt.Sprintf("%.d", numClipMove)
+			if numClipMove == 0 {
+				return empty
+			}
+			return strconv.Itoa(numClipMove)
 		case "%c":
-			result = fmt.Sprintf("%.d", numClipCopy)
+			if numClipCopy == 0 {
+				return empty
+			}
+			return strconv.Itoa(numClipCopy)
 		case "%s":
-			result = fmt.Sprintf("%.d", len(currSelections))
+			if numCurrSelections == 0 {
+				return empty
+			}
+			return strconv.Itoa(numCurrSelections)
 		case "%v":
-			result = fmt.Sprintf("%.d", len(currVSelections))
+			if numCurrVSelections == 0 {
+				return empty
+			}
+			return strconv.Itoa(numCurrVSelections)
 		case "%f":
-			result = strings.Join(dir.filter, " ")
+			return cmp.Or(strings.Join(dir.filter, " "), empty)
 		case "%i":
-			result = strconv.Itoa(ind)
+			return strconv.Itoa(ind)
 		case "%t":
-			result = strconv.Itoa(tot)
+			return strconv.Itoa(tot)
 		case "%h":
-			result = strconv.Itoa(hid)
+			return strconv.Itoa(hid)
 		case "%P":
-			result = percentage
+			return percentage
 		case "%d":
-			result = diskFree(dir.path)
+			return cmp.Or(diskFree(dir.path), empty)
 		default:
 			s = strings.TrimSuffix(strings.TrimPrefix(s, "%{"), "}")
 			if val, ok := opts[s]; ok {
-				result = formatRulerOpt(s, val)
+				return cmp.Or(formatRulerOpt(s, val), empty)
 			}
+			return empty
 		}
-		if result == "" {
-			return "\x00"
-		}
-		return result
 	})
 	var ruler strings.Builder
 	for section := range strings.SplitSeq(rulerfmt, "\x1f") {
@@ -996,7 +880,7 @@ func (ui *ui) drawRuler(nav *nav) {
 
 func (ui *ui) drawRulerFile(nav *nav) {
 	if ui.rulerErr != nil {
-		err := fmt.Sprintf(optionToFmtstr(gOpts.errorfmt), fmt.Errorf("parsing ruler: %w", ui.rulerErr))
+		err := fmt.Sprintf(optionToFmtstr(gOpts.errorfmt), sanitizeName(fmt.Sprintf("parsing ruler: %s", ui.rulerErr)))
 		ui.msgWin.print(ui.screen, 0, 0, tcell.StyleDefault, err)
 		return
 	}
@@ -1006,10 +890,10 @@ func (ui *ui) drawRulerFile(nav *nav) {
 	if curr != nil {
 		if curr.err == nil {
 			stat = &statData{
-				Path:        curr.path,
-				Name:        curr.Name(),
-				Extension:   curr.ext,
-				Size:        uint64(curr.Size()),
+				Path:        sanitizeName(curr.path),
+				Name:        sanitizeName(curr.Name()),
+				Extension:   sanitizeName(curr.ext),
+				Size:        curr.Size(),
 				DirSize:     curr.dirSize,
 				DirCount:    curr.dirCount,
 				Permissions: permString(curr.Mode()),
@@ -1020,7 +904,7 @@ func (ui *ui) drawRulerFile(nav *nav) {
 				LinkCount:   linkCount(curr),
 				User:        userName(curr),
 				Group:       groupName(curr),
-				Target:      curr.linkTarget,
+				Target:      sanitizeName(curr.linkTarget),
 				CustomInfo:  curr.customInfo,
 			}
 		} else {
@@ -1031,7 +915,8 @@ func (ui *ui) drawRulerFile(nav *nav) {
 	dir := nav.currDir()
 	tot := len(dir.files)
 	ind := min(dir.ind+1, tot)
-	hid := len(dir.allFiles) - tot
+	all := len(dir.allFiles)
+	hid := all - tot
 
 	var linePercentage string
 	if tot == 0 {
@@ -1087,9 +972,9 @@ func (ui *ui) drawRulerFile(nav *nav) {
 		mode = "VISUAL"
 	}
 
-	options := make(map[string]string)
 	v := reflect.ValueOf(gOpts)
 	t := v.Type()
+	options := make(map[string]string, v.NumField())
 	for i := range v.NumField() {
 		name := t.Field(i).Name
 		switch name {
@@ -1103,7 +988,7 @@ func (ui *ui) drawRulerFile(nav *nav) {
 	data := rulerData{
 		SPACER:           "\x1f",
 		Message:          ui.msg,
-		Keys:             string(ui.keyCount) + string(ui.keyAcc),
+		Keys:             ui.keyCount + ui.keyAcc,
 		Progress:         progress,
 		Copy:             copiedPaths,
 		Cut:              cutPaths,
@@ -1112,6 +997,7 @@ func (ui *ui) drawRulerFile(nav *nav) {
 		Index:            ind,
 		Total:            tot,
 		Hidden:           hid,
+		All:              all,
 		LinePercentage:   linePercentage,
 		ScrollPercentage: scrollPercentage,
 		Filter:           dir.filter,
@@ -1123,7 +1009,7 @@ func (ui *ui) drawRulerFile(nav *nav) {
 
 	left, right, err := renderRuler(ui.ruler, data, ui.msgWin.w)
 	if err != nil {
-		err := fmt.Sprintf(optionToFmtstr(gOpts.errorfmt), fmt.Errorf("rendering ruler: %w", err))
+		err := fmt.Sprintf(optionToFmtstr(gOpts.errorfmt), sanitizeName(fmt.Sprintf("rendering ruler: %s", err)))
 		ui.msgWin.print(ui.screen, 0, 0, tcell.StyleDefault, err)
 		return
 	}
@@ -1144,13 +1030,13 @@ func (ui *ui) drawPreview(nav *nav, context *dirContext) {
 	if gOpts.preview {
 		if curr.isPreviewable() {
 			if reg, ok := nav.regCache[curr.path]; ok {
-				win.printReg(ui.screen, reg, nav.previewLoading, &ui.sxScreen)
+				win.printReg(ui.screen, reg, &ui.sxScreen, nav.previewTimer)
 			}
 		} else if curr.IsDir() {
 			ui.sxScreen.lastFile = ""
 			dir := nav.getDir(curr.path)
 			dirStyle := &dirStyle{colors: ui.styles, icons: ui.icons, role: Preview}
-			win.printDir(ui, dir, context, dirStyle)
+			win.printDir(ui, dir, context, dirStyle, nav.previewTimer)
 		}
 	}
 }
@@ -1159,37 +1045,52 @@ func (ui *ui) drawBox() {
 	st := parseEscapeSequence(gOpts.borderfmt)
 
 	w, h := ui.screen.Size()
+	style := gOpts.borderstyle
 
-	for i := 1; i < w-1; i++ {
-		ui.screen.SetContent(i, 1, tcell.RuneHLine, nil, st)
-		ui.screen.SetContent(i, h-2, tcell.RuneHLine, nil, st)
-	}
-
-	for i := 2; i < h-2; i++ {
-		ui.screen.SetContent(0, i, tcell.RuneVLine, nil, st)
-		ui.screen.SetContent(w-1, i, tcell.RuneVLine, nil, st)
-	}
-
-	if gOpts.roundbox {
-		ui.screen.SetContent(0, 1, '╭', nil, st)
-		ui.screen.SetContent(w-1, 1, '╮', nil, st)
-		ui.screen.SetContent(0, h-2, '╰', nil, st)
-		ui.screen.SetContent(w-1, h-2, '╯', nil, st)
-	} else {
-		ui.screen.SetContent(0, 1, tcell.RuneULCorner, nil, st)
-		ui.screen.SetContent(w-1, 1, tcell.RuneURCorner, nil, st)
-		ui.screen.SetContent(0, h-2, tcell.RuneLLCorner, nil, st)
-		ui.screen.SetContent(w-1, h-2, tcell.RuneLRCorner, nil, st)
-	}
-
-	wacc := 0
-	for wind := range len(ui.wins) - 1 {
-		wacc += ui.wins[wind].w + 1
-		ui.screen.SetContent(wacc, 1, tcell.RuneTTee, nil, st)
-		for i := 2; i < h-2; i++ {
-			ui.screen.SetContent(wacc, i, tcell.RuneVLine, nil, st)
+	if style&borderOutline != 0 {
+		for i := 1; i < w-1; i++ {
+			ui.screen.PutStrStyled(i, 1, string(tcell.RuneHLine), st)
+			ui.screen.PutStrStyled(i, h-2, string(tcell.RuneHLine), st)
 		}
-		ui.screen.SetContent(wacc, h-2, tcell.RuneBTee, nil, st)
+
+		for i := 2; i < h-2; i++ {
+			ui.screen.PutStrStyled(0, i, string(tcell.RuneVLine), st)
+			ui.screen.PutStrStyled(w-1, i, string(tcell.RuneVLine), st)
+		}
+
+		if style&borderRound != 0 {
+			ui.screen.PutStrStyled(0, 1, "╭", st)
+			ui.screen.PutStrStyled(w-1, 1, "╮", st)
+			ui.screen.PutStrStyled(0, h-2, "╰", st)
+			ui.screen.PutStrStyled(w-1, h-2, "╯", st)
+		} else {
+			ui.screen.PutStrStyled(0, 1, string(tcell.RuneULCorner), st)
+			ui.screen.PutStrStyled(w-1, 1, string(tcell.RuneURCorner), st)
+			ui.screen.PutStrStyled(0, h-2, string(tcell.RuneLLCorner), st)
+			ui.screen.PutStrStyled(w-1, h-2, string(tcell.RuneLRCorner), st)
+		}
+	}
+
+	if style&borderSeparators == 0 {
+		return
+	}
+
+	top, bot := 1, h-1
+	if style&borderOutline != 0 {
+		top, bot = 2, h-2
+	}
+
+	for wind := range len(ui.wins) - 1 {
+		x := ui.wins[wind].x + ui.wins[wind].w
+		if style&borderOutline != 0 {
+			ui.screen.PutStrStyled(x, 1, string(tcell.RuneTTee), st)
+		}
+		for y := top; y < bot; y++ {
+			ui.screen.PutStrStyled(x, y, string(tcell.RuneVLine), st)
+		}
+		if style&borderOutline != 0 {
+			ui.screen.PutStrStyled(x, h-2, string(tcell.RuneBTee), st)
+		}
 	}
 }
 
@@ -1255,10 +1156,15 @@ func (ui *ui) draw(nav *nav) {
 			role = Active
 		}
 		if dir := ui.dirOfWin(nav, i); dir != nil {
-			ui.wins[i].printDir(ui, dir, &context,
-				&dirStyle{colors: ui.styles, icons: ui.icons, role: role})
+			dirStyle := &dirStyle{colors: ui.styles, icons: ui.icons, role: role}
+			ui.wins[i].printDir(ui, dir, &context, dirStyle, nav.previewTimer)
 		}
 	}
+
+	// sanitize cmd-line buffers at render time
+	cmdPrefix := sanitizeName(ui.cmdPrefix)
+	cmdAccLeft := sanitizeName(ui.cmdAccLeft)
+	cmdAccRight := sanitizeName(ui.cmdAccRight)
 
 	switch ui.cmdPrefix {
 	case "":
@@ -1271,17 +1177,17 @@ func (ui *ui) draw(nav *nav) {
 		ui.screen.HideCursor()
 	case ">":
 		maxWidth := ui.msgWin.w - 1 // leave space for cursor at the end
-		prefix := runeSliceWidthRange([]rune(ui.cmdPrefix), 0, maxWidth)
-		left := runeSliceWidthLastRange(ui.cmdAccLeft, maxWidth-runeSliceWidth(prefix)-printLength(ui.msg))
-		ui.msgWin.printLine(ui.screen, 0, 0, st, string(prefix)+ui.msg)
-		ui.msgWin.print(ui.screen, runeSliceWidth(prefix)+printLength(ui.msg), 0, st, string(left)+string(ui.cmdAccRight))
-		ui.screen.ShowCursor(ui.msgWin.x+runeSliceWidth(prefix)+printLength(ui.msg)+runeSliceWidth(left), ui.msgWin.y)
+		prefix := truncateRight(cmdPrefix, maxWidth)
+		left := truncateLeft(cmdAccLeft, maxWidth-displaywidth.String(prefix)-printLength(ui.msg))
+		ui.msgWin.printLine(ui.screen, 0, 0, st, prefix+ui.msg)
+		ui.msgWin.print(ui.screen, displaywidth.String(prefix)+printLength(ui.msg), 0, st, left+cmdAccRight)
+		ui.screen.ShowCursor(ui.msgWin.x+displaywidth.String(prefix)+printLength(ui.msg)+displaywidth.String(left), ui.msgWin.y)
 	default:
 		maxWidth := ui.msgWin.w - 1 // leave space for cursor at the end
-		prefix := runeSliceWidthRange([]rune(ui.cmdPrefix), 0, maxWidth)
-		left := runeSliceWidthLastRange(ui.cmdAccLeft, maxWidth-runeSliceWidth(prefix))
-		ui.msgWin.printLine(ui.screen, 0, 0, st, string(prefix)+string(left)+string(ui.cmdAccRight))
-		ui.screen.ShowCursor(ui.msgWin.x+runeSliceWidth(prefix)+runeSliceWidth(left), ui.msgWin.y)
+		prefix := truncateRight(cmdPrefix, maxWidth)
+		left := truncateLeft(cmdAccLeft, maxWidth-displaywidth.String(prefix))
+		ui.msgWin.printLine(ui.screen, 0, 0, st, prefix+left+cmdAccRight)
+		ui.screen.ShowCursor(ui.msgWin.x+displaywidth.String(prefix)+displaywidth.String(left), ui.msgWin.y)
 	}
 
 	ui.drawPreview(nav, &context)
@@ -1295,7 +1201,7 @@ func (ui *ui) draw(nav *nav) {
 	ui.screen.Show()
 }
 
-func findBinds(keys map[string]expr, prefix string) (binds map[string]expr, ok bool) {
+func findBinds(keys map[string]expr, prefix string) (binds map[string]expr, exact bool) {
 	binds = make(map[string]expr)
 	for key, expr := range keys {
 		if !strings.HasPrefix(key, prefix) {
@@ -1303,10 +1209,10 @@ func findBinds(keys map[string]expr, prefix string) (binds map[string]expr, ok b
 		}
 		binds[key] = expr
 		if key == prefix {
-			ok = true
+			exact = true
 		}
 	}
-	return
+	return binds, exact
 }
 
 func listBinds(binds map[string]map[string]expr) string {
@@ -1338,11 +1244,11 @@ func listBinds(binds map[string]map[string]expr) string {
 		}
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].key != entries[j].key {
-			return entries[i].key < entries[j].key
+	slices.SortFunc(entries, func(a, b entry) int {
+		if c := cmp.Compare(a.key, b.key); c != 0 {
+			return c
 		}
-		return entries[i].mode < entries[j].mode
+		return cmp.Compare(a.mode, b.mode)
 	})
 
 	t.Init(b, 0, gOpts.tabstop, 2, '\t', 0)
@@ -1359,17 +1265,11 @@ func listMatchingBinds(binds map[string]expr, prefix string) string {
 	t := new(tabwriter.Writer)
 	b := new(bytes.Buffer)
 
-	keys := make([]string, 0, len(binds))
-	for k := range binds {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
 	t.Init(b, 0, gOpts.tabstop, 2, '\t', 0)
 	fmt.Fprintln(t, "key\tcommand")
-	for _, k := range keys {
+	for _, k := range slices.Sorted(maps.Keys(binds)) {
 		remain, _ := strings.CutPrefix(k, prefix)
-		fmt.Fprintf(t, "%s\t%v\n", remain, binds[k])
+		fmt.Fprintf(t, "%s\t%v\n", sanitizeName(remain), binds[k])
 	}
 	t.Flush()
 
@@ -1380,15 +1280,9 @@ func listCmds(cmds map[string]expr) string {
 	t := new(tabwriter.Writer)
 	b := new(bytes.Buffer)
 
-	keys := make([]string, 0, len(cmds))
-	for k := range cmds {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
 	t.Init(b, 0, gOpts.tabstop, 2, '\t', 0)
 	fmt.Fprintln(t, "name\tcommand")
-	for _, k := range keys {
+	for _, k := range slices.Sorted(maps.Keys(cmds)) {
 		fmt.Fprintf(t, "%s\t%v\n", k, cmds[k])
 	}
 	t.Flush()
@@ -1406,13 +1300,14 @@ func listJumps(jumps []string, ind int) string {
 	fmt.Fprintln(t, "  jump\tpath")
 	// print jumps in order of most recent, Vim uses the opposite order
 	for i := len(jumps) - 1; i >= 0; i-- {
+		path := jumps[i]
 		switch {
 		case i < ind:
-			fmt.Fprintf(t, "  %*d\t%s\n", maxlength, ind-i, jumps[i])
+			fmt.Fprintf(t, "  %*d\t%s\n", maxlength, ind-i, path)
 		case i > ind:
-			fmt.Fprintf(t, "  %*d\t%s\n", maxlength, i-ind, jumps[i])
+			fmt.Fprintf(t, "  %*d\t%s\n", maxlength, i-ind, path)
 		default:
-			fmt.Fprintf(t, "> %*d\t%s\n", maxlength, 0, jumps[i])
+			fmt.Fprintf(t, "> %*d\t%s\n", maxlength, 0, path)
 		}
 	}
 	t.Flush()
@@ -1440,16 +1335,10 @@ func listMarks(marks map[string]string) string {
 	t := new(tabwriter.Writer)
 	b := new(bytes.Buffer)
 
-	keys := make([]string, 0, len(marks))
-	for k := range marks {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
 	t.Init(b, 0, gOpts.tabstop, 2, '\t', 0)
 	fmt.Fprintln(t, "mark\tpath")
-	for _, k := range keys {
-		fmt.Fprintf(t, "%s\t%s\n", k, marks[k])
+	for _, k := range slices.Sorted(maps.Keys(marks)) {
+		fmt.Fprintf(t, "%s\t%s\n", sanitizeName(k), sanitizeName(marks[k]))
 	}
 	t.Flush()
 
@@ -1465,75 +1354,13 @@ func listFilesInCurrDir(nav *nav) string {
 
 	b := new(strings.Builder)
 	for _, file := range dir.files {
+		if strings.ContainsAny(file.path, "\n\r") {
+			continue
+		}
 		fmt.Fprintln(b, file.path)
 	}
 
 	return b.String()
-}
-
-func (ui *ui) pollEvent() tcell.Event {
-	select {
-	case val := <-ui.keyChan:
-		var ch rune
-		var mod tcell.ModMask
-		k := tcell.KeyRune
-
-		if key, ok := gValKey[val]; ok {
-			return tcell.NewEventKey(key, ch, mod)
-		}
-
-		switch {
-		case utf8.RuneCountInString(val) == 1:
-			ch, _ = utf8.DecodeRuneInString(val)
-		case val == "<lt>":
-			ch = '<'
-		case val == "<gt>":
-			ch = '>'
-		case val == "<space>":
-			ch = ' '
-		case reModKey.MatchString(val):
-			matches := reModKey.FindStringSubmatch(val)
-			switch matches[1] {
-			case "c":
-				mod = tcell.ModCtrl
-			case "s":
-				mod = tcell.ModShift
-			case "a":
-				mod = tcell.ModAlt
-			}
-			val = matches[2]
-			if utf8.RuneCountInString(val) == 1 {
-				ch, _ = utf8.DecodeRuneInString(val)
-				break
-			} else if key, ok := gValKey["<"+val+">"]; ok {
-				k = key
-				break
-			}
-			fallthrough
-		default:
-			k = tcell.KeyESC
-			ui.echoerrf("unknown key: %s", val)
-		}
-
-		return tcell.NewEventKey(k, ch, mod)
-	case ev := <-ui.tevChan:
-		return ev
-	}
-}
-
-func addSpecialKeyModifier(val string, mod tcell.ModMask) string {
-	switch {
-	case !strings.HasPrefix(val, "<"):
-		return val
-	case mod == tcell.ModCtrl && !strings.HasPrefix(val, "<c-"):
-		return "<c-" + val[1:]
-	case mod == tcell.ModShift:
-		return "<s-" + val[1:]
-	case mod == tcell.ModAlt:
-		return "<a-" + val[1:]
-	default:
-		return val
-	}
 }
 
 // readNormalEvent is used to read a normal event on the client side. For keys,
@@ -1541,7 +1368,6 @@ func addSpecialKeyModifier(val string, mod tcell.ModMask) string {
 // preceding any non-digit characters (e.g. "42y2k" as 42 times "y2k").
 func (ui *ui) readNormalEvent(ev tcell.Event, nav *nav) expr {
 	draw := &callExpr{"draw", nil, 1}
-	count := 0
 
 	keys := gOpts.nkeys
 	if nav.isVisualMode() {
@@ -1554,78 +1380,63 @@ func (ui *ui) readNormalEvent(ev tcell.Event, nav *nav) expr {
 			return nil
 		}
 
-		// KeyRune is a regular character
-		if tev.Key() == tcell.KeyRune {
-			switch {
-			case tev.Rune() == '<':
-				ui.keyAcc = append(ui.keyAcc, []rune("<lt>")...)
-			case tev.Rune() == '>':
-				ui.keyAcc = append(ui.keyAcc, []rune("<gt>")...)
-			case tev.Rune() == ' ':
-				ui.keyAcc = append(ui.keyAcc, []rune("<space>")...)
-			case tev.Modifiers() == tcell.ModAlt:
-				ui.keyAcc = append(ui.keyAcc, '<', 'a', '-', tev.Rune(), '>')
-			case unicode.IsDigit(tev.Rune()) && len(ui.keyAcc) == 0:
-				ui.keyCount = append(ui.keyCount, tev.Rune())
-			default:
-				ui.keyAcc = append(ui.keyAcc, tev.Rune())
+		isDigitKey := func(*tcell.EventKey) bool {
+			if tev.Key() != tcell.KeyRune || tev.Modifiers() != tcell.ModNone {
+				return false
 			}
-		} else {
-			val := gKeyVal[tev.Key()]
-			val = addSpecialKeyModifier(val, tev.Modifiers())
-			if val == "<esc>" && len(ui.keyAcc) != 0 {
-				ui.keyAcc = nil
-				ui.keyCount = nil
-				ui.menu = ""
-				return draw
-			}
-			ui.keyAcc = append(ui.keyAcc, []rune(val)...)
+
+			s := tev.Str()
+			return len(s) == 1 && s[0] >= '0' && s[0] <= '9'
 		}
 
-		if len(ui.keyAcc) == 0 {
-			return draw
-		}
-
-		binds, ok := findBinds(keys, string(ui.keyAcc))
-
-		switch len(binds) {
-		case 0:
-			ui.echoerrf("unknown mapping: %s", string(ui.keyAcc))
-			ui.keyAcc = nil
-			ui.keyCount = nil
+		switch {
+		case tev.Key() == tcell.KeyEsc && ui.keyAcc != "":
+			ui.keyAcc = ""
+			ui.keyCount = ""
 			ui.menu = ""
 			return draw
+		case isDigitKey(tev) && ui.keyAcc == "":
+			ui.keyCount += tev.Str()
+			return draw
 		default:
-			if ok {
-				if len(ui.keyCount) > 0 {
-					c, err := strconv.Atoi(string(ui.keyCount))
-					if err != nil {
-						log.Printf("converting command count: %s", err)
-					}
-					count = c
-				}
-				expr := keys[string(ui.keyAcc)]
+			ui.keyAcc += readKey(tev)
+		}
 
-				if count != 0 {
-					switch e := expr.(type) {
-					case *callExpr:
-						expr = &callExpr{name: e.name, args: e.args, count: count}
-					case *listExpr:
-						expr = &listExpr{exprs: e.exprs, count: count}
-					}
-				}
-
-				ui.keyAcc = nil
-				ui.keyCount = nil
-				ui.menu = ""
-				return expr
-			}
+		binds, exact := findBinds(keys, ui.keyAcc)
+		if len(binds) == 0 {
+			ui.echoerrf("unknown mapping: %s", ui.keyAcc)
+			ui.keyAcc = ""
+			ui.keyCount = ""
+			ui.menu = ""
+			return draw
+		}
+		if !exact {
 			if gOpts.showbinds {
 				// mode and already typed keys are obvious here; no need to clutter the menu
-				ui.menu = listMatchingBinds(binds, string(ui.keyAcc))
+				ui.menu = listMatchingBinds(binds, ui.keyAcc)
 			}
 			return draw
 		}
+
+		expr := keys[ui.keyAcc]
+		if ui.keyCount != "" {
+			if count, err := strconv.Atoi(ui.keyCount); err != nil {
+				log.Printf("converting command count: %s", err)
+			} else if count > 0 {
+				switch e := expr.(type) {
+				case *callExpr:
+					expr = &callExpr{name: e.name, args: e.args, count: count}
+				case *listExpr:
+					expr = &listExpr{exprs: e.exprs, count: count}
+				}
+			}
+		}
+
+		ui.keyAcc = ""
+		ui.keyCount = ""
+		ui.menu = ""
+		return expr
+
 	case *tcell.EventMouse:
 		if ui.cmdPrefix != "" {
 			return nil
@@ -1669,8 +1480,8 @@ func (ui *ui) readNormalEvent(ev tcell.Event, nav *nav) expr {
 		}
 		if button != "<m-1>" && button != "<m-2>" {
 			ui.echoerrf("unknown mapping: %s", button)
-			ui.keyAcc = nil
-			ui.keyCount = nil
+			ui.keyAcc = ""
+			ui.keyCount = ""
 			ui.menu = ""
 			return draw
 		}
@@ -1745,21 +1556,12 @@ func (ui *ui) readNormalEvent(ev tcell.Event, nav *nav) expr {
 
 func readCmdEvent(ev tcell.Event) expr {
 	if tev, ok := ev.(*tcell.EventKey); ok {
-		if tev.Key() == tcell.KeyRune {
-			if tev.Modifiers() == tcell.ModAlt {
-				val := string([]rune{'<', 'a', '-', tev.Rune(), '>'})
-				if expr, ok := gOpts.cmdkeys[val]; ok {
-					return expr
-				}
-			} else {
-				return &callExpr{"cmd-insert", []string{string(tev.Rune())}, 1}
-			}
-		} else {
-			val := gKeyVal[tev.Key()]
-			val = addSpecialKeyModifier(val, tev.Modifiers())
-			if expr, ok := gOpts.cmdkeys[val]; ok {
-				return expr
-			}
+		if tev.Key() == tcell.KeyRune && tev.Modifiers()&tcell.ModAlt == 0 {
+			return &callExpr{"cmd-insert", []string{tev.Str()}, 1}
+		}
+
+		if expr, ok := gOpts.cmdkeys[readKey(tev)]; ok {
+			return expr
 		}
 	}
 	return nil
@@ -1777,12 +1579,10 @@ func (ui *ui) readEvent(ev tcell.Event, nav *nav) expr {
 	return ui.readNormalEvent(ev, nav)
 }
 
-func (ui *ui) readExpr() {
-	go func() {
-		for {
-			ui.evChan <- ui.pollEvent()
-		}
-	}()
+func (ui *ui) readEvents() {
+	for ev := range ui.screen.EventQ() {
+		ui.evChan <- ev
+	}
 }
 
 func (ui *ui) suspend() error {
@@ -1791,12 +1591,7 @@ func (ui *ui) suspend() error {
 }
 
 func (ui *ui) resume() error {
-	err := ui.screen.Resume()
-	if !ui.polling {
-		go ui.pollEvents()
-		ui.polling = true
-	}
-	return err
+	return ui.screen.Resume()
 }
 
 func (ui *ui) exportSizes() {
@@ -1829,10 +1624,15 @@ func listMatches(screen tcell.Screen, matches []compMatch, selectedInd int) (str
 		return "", nil
 	}
 
+	names := make([]string, len(matches))
+	for i, m := range matches {
+		names[i] = sanitizeName(m.name)
+	}
+
 	wtot, _ := screen.Size()
 	wcol := 0
-	for _, m := range matches {
-		wcol = max(wcol, runeSliceWidth([]rune(m.name)))
+	for _, n := range names {
+		wcol = max(wcol, printLength(n))
 	}
 	wcol += gOpts.tabstop - wcol%gOpts.tabstop
 	ncol := max(wtot/wcol, 1)
@@ -1840,19 +1640,19 @@ func listMatches(screen tcell.Screen, matches []compMatch, selectedInd int) (str
 	var b strings.Builder
 	b.WriteString("possible matches")
 
-	for i, match := range matches {
+	for i, n := range names {
 		if i%ncol == 0 {
 			b.WriteByte('\n')
 		}
-		w := runeSliceWidth([]rune(match.name))
-		fmt.Fprintf(&b, "%s%*s", match.name, wcol-w, "")
+		w := printLength(n)
+		fmt.Fprintf(&b, "%s%*s", n, wcol-w, "")
 	}
 
 	b.WriteByte('\n')
 
 	var selection *menuSelect
 	if selectedInd != -1 {
-		selection = &menuSelect{selectedInd % ncol * wcol, selectedInd/ncol + 1, matches[selectedInd].name}
+		selection = &menuSelect{selectedInd % ncol * wcol, selectedInd/ncol + 1, names[selectedInd]}
 	}
 
 	return b.String(), selection

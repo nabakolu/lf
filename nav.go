@@ -12,10 +12,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -37,8 +35,8 @@ type file struct {
 	linkState   linkState // symlink state
 	linkTarget  string    // path a symlink points to
 	path        string    // full path including the name
-	dirCount    *uint64   // number of items inside the directory
-	dirSize     *uint64   // total directory size (needs to be calculated via `calcdirsize`)
+	dirCount    int       // number of items inside the directory
+	dirSize     int64     // total directory size (needs to be calculated via `calcdirsize`)
 	accessTime  time.Time // time of last access
 	birthTime   time.Time // time of file birth
 	changeTime  time.Time // time of last status (inode) change
@@ -55,6 +53,8 @@ func newFile(path string) *file {
 			FileInfo:   &fakeStat{name: filepath.Base(path)},
 			linkState:  notLink,
 			path:       path,
+			dirCount:   -1,
+			dirSize:    -1,
 			accessTime: time.Unix(0, 0),
 			birthTime:  time.Unix(0, 0),
 			changeTime: time.Unix(0, 0),
@@ -96,7 +96,7 @@ func newFile(path string) *file {
 		ct = ts.ChangeTime()
 	}
 
-	var dirCount *uint64
+	dirCount := -1
 	if lstat.IsDir() && getDirCounts(filepath.Dir(path)) {
 		d, err := os.Open(path)
 		if err != nil {
@@ -108,8 +108,7 @@ func newFile(path string) *file {
 			if names == nil && err != io.EOF {
 				log.Printf("reading directory: %s", err)
 			} else {
-				v := uint64(len(names))
-				dirCount = &v
+				dirCount = len(names)
 			}
 		}
 	}
@@ -120,6 +119,7 @@ func newFile(path string) *file {
 		linkTarget: linkTarget,
 		path:       path,
 		dirCount:   dirCount,
+		dirSize:    -1,
 		accessTime: at,
 		birthTime:  bt,
 		changeTime: ct,
@@ -162,26 +162,26 @@ func readdir(path string) ([]*file, error) {
 }
 
 type dir struct {
-	loading      bool       // whether directory is loading from disk
-	loadTime     time.Time  // last load time
-	ind          int        // 0-based index of current entry in dir.files
-	pos          int        // 0-based cursor row in directory window
-	path         string     // full path of directory
-	files        []*file    // displayed files in directory including or excluding hidden ones
-	allFiles     []*file    // all files in directory including hidden ones (same array as files)
-	sortby       sortMethod // sortby value from last sort
-	dircounts    bool       // dircounts value from last sort
-	dirfirst     bool       // dirfirst value from last sort
-	dironly      bool       // dironly value from last sort
-	hidden       bool       // hidden value from last sort
-	reverse      bool       // reverse value from last sort
-	visualAnchor int        // index where Visual mode was initiated
-	visualWrap   int        // wrap direction in Visual mode (0: none, +: bottom->top, -: top->bottom)
-	hiddenfiles  []string   // hiddenfiles value from last sort
-	filter       []string   // last filter for this directory
-	ignorecase   bool       // ignorecase value from last sort
-	ignoredia    bool       // ignoredia value from last sort
-	noPerm       bool       // whether lf has no permission to open the directory
+	loading        bool       // whether directory is loading from disk
+	loadTime       time.Time  // last load time
+	ind            int        // 0-based index of current entry in dir.files
+	pos            int        // 0-based cursor row in directory window
+	path           string     // full path of directory
+	files          []*file    // displayed files in directory including or excluding hidden ones
+	allFiles       []*file    // all files in directory including hidden ones (same array as files)
+	sortby         sortMethod // sortby value from last sort
+	dircounts      bool       // dircounts value from last sort
+	dirfirst       bool       // dirfirst value from last sort
+	dironly        bool       // dironly value from last sort
+	hidden         bool       // hidden value from last sort
+	reverse        bool       // reverse value from last sort
+	visualAnchor   int        // index where Visual mode was initiated
+	visualWrap     int        // wrap direction in Visual mode (0: none, +: bottom->top, -: top->bottom)
+	hiddenfiles    []string   // hiddenfiles value from last sort
+	filter         []string   // last filter for this directory
+	sortignorecase bool       // sortignorecase value from last sort
+	sortignoredia  bool       // sortignoredia value from last sort
+	noPerm         bool       // whether lf has no permission to open the directory
 }
 
 func newDir(path string) *dir {
@@ -208,8 +208,8 @@ func (dir *dir) sort() {
 	dir.hidden = getHidden(dir.path)
 	dir.reverse = getReverse(dir.path)
 	dir.hiddenfiles = gOpts.hiddenfiles
-	dir.ignorecase = gOpts.ignorecase
-	dir.ignoredia = gOpts.ignoredia
+	dir.sortignorecase = getSortIgnoreCase(dir.path)
+	dir.sortignoredia = getSortIgnoreDia(dir.path)
 
 	dir.files = dir.allFiles
 
@@ -256,10 +256,10 @@ func (dir *dir) sort() {
 	}
 
 	normalize := func(s string) string {
-		if dir.ignorecase {
+		if dir.sortignorecase {
 			s = strings.ToLower(s)
 		}
-		if dir.ignoredia {
+		if dir.sortignoredia {
 			s = removeDiacritics(s)
 		}
 		return s
@@ -275,29 +275,17 @@ func (dir *dir) sort() {
 			return cmp.Compare(normalize(f1.Name()), normalize(f2.Name()))
 		})
 	case sizeSort:
-		sizeVal := func(f *file) *uint64 {
+		sizeVal := func(f *file) int64 {
 			if f.IsDir() && dir.dircounts {
-				return f.dirCount
+				return int64(f.dirCount)
 			}
-			if f.dirSize != nil {
+			if f.dirSize >= 0 {
 				return f.dirSize
 			}
-			v := uint64(f.Size())
-			return &v
+			return f.Size()
 		}
 		applySort(func(f1, f2 *file) int {
-			s1 := sizeVal(f1)
-			s2 := sizeVal(f2)
-			switch {
-			case s1 == nil && s2 == nil:
-				return 0
-			case s1 == nil && s2 != nil:
-				return -1
-			case s1 != nil && s2 == nil:
-				return 1
-			default:
-				return cmp.Compare(*s1, *s2)
-			}
+			return cmp.Compare(sizeVal(f1), sizeVal(f2))
 		})
 	case timeSort:
 		applySort(func(f1, f2 *file) int {
@@ -488,7 +476,6 @@ type nav struct {
 	prevFilter      []string
 	volatilePreview bool
 	previewTimer    *time.Timer
-	previewLoading  bool
 	preloadTimer    *time.Timer
 	jumpList        []string
 	jumpListInd     int
@@ -504,18 +491,19 @@ func (nav *nav) getDir(path string) *dir {
 	}()
 
 	d := &dir{
-		loading:      true,
-		path:         path,
-		sortby:       getSortBy(path),
-		dircounts:    getDirCounts(path),
-		dirfirst:     getDirFirst(path),
-		dironly:      getDirOnly(path),
-		hidden:       getHidden(path),
-		reverse:      getReverse(path),
-		visualAnchor: -1,
-		hiddenfiles:  gOpts.hiddenfiles,
-		ignorecase:   gOpts.ignorecase,
-		ignoredia:    gOpts.ignoredia,
+		loading:        true,
+		loadTime:       time.Now(),
+		path:           path,
+		sortby:         getSortBy(path),
+		dircounts:      getDirCounts(path),
+		dirfirst:       getDirFirst(path),
+		dironly:        getDirOnly(path),
+		hidden:         getHidden(path),
+		reverse:        getReverse(path),
+		visualAnchor:   -1,
+		hiddenfiles:    gOpts.hiddenfiles,
+		sortignorecase: getSortIgnoreCase(path),
+		sortignoredia:  getSortIgnoreDia(path),
 	}
 	nav.dirCache[path] = d
 	return d
@@ -557,9 +545,9 @@ func (nav *nav) checkDir(dir *dir) {
 		dir.dironly != getDirOnly(dir.path) ||
 		dir.hidden != getHidden(dir.path) ||
 		dir.reverse != getReverse(dir.path) ||
-		!reflect.DeepEqual(dir.hiddenfiles, gOpts.hiddenfiles) ||
-		dir.ignorecase != gOpts.ignorecase ||
-		dir.ignoredia != gOpts.ignoredia:
+		!slices.Equal(dir.hiddenfiles, gOpts.hiddenfiles) ||
+		dir.sortignorecase != getSortIgnoreCase(dir.path) ||
+		dir.sortignoredia != getSortIgnoreDia(dir.path):
 		dir.loading = true
 		sd := *dir
 		go func() {
@@ -570,13 +558,7 @@ func (nav *nav) checkDir(dir *dir) {
 	}
 }
 
-func (nav *nav) loadDirs() {
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Printf("getting current directory: %s", err)
-		return
-	}
-
+func (nav *nav) loadDirs(wd string) {
 	var dirPaths []string
 
 	for curr, base := wd, ""; !isRoot(base); curr, base = filepath.Dir(curr), filepath.Base(curr) {
@@ -674,12 +656,13 @@ func (nav *nav) renew() {
 }
 
 func (nav *nav) reload() {
+	wd := nav.currDir().path
 	curr := nav.currFile()
 
 	clear(nav.dirCache)
 	clear(nav.regCache)
 
-	nav.loadDirs()
+	nav.loadDirs(wd)
 
 	if curr != nil {
 		dir := nav.currDir()
@@ -693,6 +676,8 @@ func (nav *nav) resize(ui *ui) {
 		return
 	}
 
+	widthChanged := previewWin.w != nav.previewWidth
+
 	nav.height = previewWin.h
 	nav.previewWidth = previewWin.w
 
@@ -700,16 +685,24 @@ func (nav *nav) resize(ui *ui) {
 		nav.getDir(path).boundPos(nav.height)
 	}
 
-	clear(nav.regCache)
+	if widthChanged {
+		clear(nav.regCache)
+	} else {
+		// drop entries that no longer match the new pane height
+		for path, r := range nav.regCache {
+			if r.loading || r.sixel || (previewWin.h > len(r.lines) && len(r.lines) == r.height) {
+				delete(nav.regCache, path)
+			}
+		}
+	}
 	nav.preloadTimer.Reset(200 * time.Millisecond)
 }
 
 func (nav *nav) position() {
-	var path string
 	var base string
 
 	for i := len(nav.dirPaths) - 1; i >= 0; i-- {
-		path = nav.dirPaths[i]
+		path := nav.dirPaths[i]
 		if i < len(nav.dirPaths)-1 {
 			nav.getDir(path).sel(base, nav.height)
 		}
@@ -865,7 +858,6 @@ func (nav *nav) preload() {
 		}
 	}
 
-	nav.startPreview()
 	for i := nav.height / 2; i >= 1; i-- {
 		doPreload(dir.ind - i)
 		doPreload(dir.ind + i)
@@ -874,7 +866,7 @@ func (nav *nav) preload() {
 }
 
 func (nav *nav) preview(path string, win *win, mode string) {
-	reg := &reg{loadTime: time.Now(), path: path}
+	reg := &reg{loadTime: time.Now(), path: path, height: win.h}
 	defer func() {
 		if (gOpts.preload && mode == "preview") || (!gOpts.preload && reg.volatile) {
 			nav.volatilePreview = true
@@ -953,6 +945,18 @@ func (nav *nav) preview(path string, win *win, mode string) {
 	if binary {
 		lines = []string{"\033[7mbinary\033[0m"}
 	}
+
+	// The internal previewer reads raw file content which may contain
+	// escape sequences that corrupt the display or enable code execution
+	// (e.g. OSC 52 clipboard writes). Replace control characters with
+	// U+FFFD so they are visible but cannot form escape sequences.
+	if len(gOpts.previewer) == 0 && !binary {
+		sixel = false
+		for i, l := range lines {
+			lines[i] = sanitizePreview(l)
+		}
+	}
+
 	reg.lines = lines
 	reg.sixel = sixel
 }
@@ -962,7 +966,6 @@ func (nav *nav) loadReg(path string, volatile bool) *reg {
 	if !ok || (!gOpts.preload && r.loading) {
 		r = &reg{loading: true, loadTime: time.Now(), path: path}
 		nav.regCache[path] = r
-		nav.startPreview()
 		if gOpts.preload {
 			select {
 			case nav.preloadChan <- path:
@@ -975,7 +978,10 @@ func (nav *nav) loadReg(path string, volatile bool) *reg {
 	}
 
 	if volatile && r.volatile {
-		nav.startPreview()
+		if !gOpts.preload {
+			r.loadTime = time.Now()
+			r.loading = true
+		}
 		nav.previewChan <- path
 	}
 
@@ -999,15 +1005,16 @@ func (nav *nav) checkReg(reg *reg) {
 
 	if s.ModTime().After(reg.loadTime) {
 		reg.loadTime = now
-		nav.startPreview()
-		nav.previewChan <- reg.path
+		reg.loading = true
+		if gOpts.preload {
+			select {
+			case nav.preloadChan <- reg.path:
+			default:
+			}
+		} else {
+			nav.previewChan <- reg.path
+		}
 	}
-}
-
-func (nav *nav) startPreview() {
-	nav.previewTimer.Stop()
-	nav.previewLoading = false
-	nav.previewTimer.Reset(100 * time.Millisecond)
 }
 
 func (nav *nav) sort() {
@@ -1624,7 +1631,8 @@ func (nav *nav) cd(path string) error {
 		return err
 	}
 
-	nav.loadDirs()
+	nav.loadDirs(path)
+	nav.renew()
 	nav.addJumpList()
 	return nil
 }
@@ -1869,15 +1877,14 @@ func (nav *nav) writeMarks() error {
 	}
 	defer f.Close()
 
-	var keys []string
-	for k := range nav.marks {
-		if !strings.Contains(gOpts.tempmarks, k) {
-			keys = append(keys, k)
+	for _, k := range slices.Sorted(maps.Keys(nav.marks)) {
+		if strings.Contains(gOpts.tempmarks, k) {
+			continue
 		}
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
+		if strings.ContainsAny(nav.marks[k], "\n\r") {
+			log.Printf("marks: skipping mark '%s' with newline in path: %q", k, nav.marks[k])
+			continue
+		}
 		_, err = fmt.Fprintf(f, "%s:%s\n", k, nav.marks[k])
 		if err != nil {
 			return fmt.Errorf("writing marks file: %w", err)
@@ -1932,13 +1939,11 @@ func (nav *nav) writeTags() error {
 	}
 	defer f.Close()
 
-	var keys []string
-	for k := range nav.tags {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
+	for _, k := range slices.Sorted(maps.Keys(nav.tags)) {
+		if strings.ContainsAny(k, "\n\r") {
+			log.Printf("tags: skipping tag with newline in path: %q", k)
+			continue
+		}
 		_, err = fmt.Fprintf(f, "%s:%s\n", k, nav.tags[k])
 		if err != nil {
 			return fmt.Errorf("writing tags file: %w", err)
@@ -1950,7 +1955,11 @@ func (nav *nav) writeTags() error {
 
 func (nav *nav) currDir() *dir {
 	if len(nav.dirPaths) == 0 {
-		nav.loadDirs()
+		wd, err := os.Getwd()
+		if err != nil {
+			log.Printf("getting current directory: %s", err)
+		}
+		nav.loadDirs(wd)
 	}
 
 	path := nav.dirPaths[len(nav.dirPaths)-1]
@@ -1967,20 +1976,6 @@ func (nav *nav) currFile() *file {
 	return dir.files[dir.ind]
 }
 
-type indexedSelections struct {
-	paths   []string
-	indices []int
-}
-
-func (m indexedSelections) Len() int { return len(m.paths) }
-
-func (m indexedSelections) Swap(i, j int) {
-	m.paths[i], m.paths[j] = m.paths[j], m.paths[i]
-	m.indices[i], m.indices[j] = m.indices[j], m.indices[i]
-}
-
-func (m indexedSelections) Less(i, j int) bool { return m.indices[i] < m.indices[j] }
-
 func (nav *nav) currSelections() []string {
 	currDirOnly := gOpts.selmode == "dir"
 	currDirPath := ""
@@ -1990,18 +1985,18 @@ func (nav *nav) currSelections() []string {
 	}
 
 	paths := make([]string, 0, len(nav.selections))
-	indices := make([]int, 0, len(nav.selections))
-	for path, index := range nav.selections {
+	for path := range nav.selections {
 		if !currDirOnly || filepath.Dir(path) == currDirPath {
 			paths = append(paths, path)
-			indices = append(indices, index)
 		}
 	}
-	sort.Sort(indexedSelections{paths: paths, indices: indices})
+	slices.SortFunc(paths, func(a, b string) int {
+		return cmp.Compare(nav.selections[a], nav.selections[b])
+	})
 	return paths
 }
 
-func (nav *nav) currFileOrSelections() (list []string, err error) {
+func (nav *nav) currFileOrSelections() ([]string, error) {
 	if sel := nav.currSelections(); len(sel) > 0 {
 		return sel, nil
 	}
@@ -2020,8 +2015,7 @@ func (nav *nav) calcDirSize() error {
 			if err != nil {
 				return err
 			}
-			v := uint64(total)
-			f.dirSize = &v
+			f.dirSize = total
 		}
 		return nil
 	}

@@ -1,14 +1,12 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"log"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/gdamore/tcell/v3"
 )
 
 // gEscapeCode is the byte that starts ANSI control sequences.
@@ -25,15 +23,15 @@ const gEscapeCode byte = '\x1b'
 func stripTermSequence(s string) string {
 	var b strings.Builder
 	slen := len(s)
-	for i := 0; i < slen; i++ {
+	for i := 0; i < slen; {
 		seq := readTermSequence(s[i:])
 		if seq != "" {
-			i += len(seq) - 1 // skip known sequence
+			i += len(seq) // skip known sequence
 			continue
 		}
 
 		r, w := utf8.DecodeRuneInString(s[i:])
-		i += w - 1
+		i += w
 		b.WriteRune(r)
 	}
 
@@ -59,11 +57,17 @@ func readTermSequence(s string) string {
 
 	switch s[1] {
 	case '[': // CSI
-		i := strings.IndexAny(s[:min(slen, 64)], "mK")
-		if i == -1 {
-			return ""
+		// Find the final byte (0x40-0x7E per ECMA-48), then check
+		// if it indicates a sequence we support (SGR or EL).
+		for i := 2; i < min(slen, 64); i++ {
+			if s[i] >= 0x40 && s[i] <= 0x7E {
+				if s[i] == 'm' || s[i] == 'K' {
+					return s[:i+1]
+				}
+				return ""
+			}
 		}
-		return s[:i+1]
+		return ""
 	case ']': // OSC
 		if slen < 4 || s[2] != '8' || s[3] != ';' {
 			return ""
@@ -172,8 +176,7 @@ loop:
 			st = st.Reverse(true)
 		case "8":
 			// TODO: tcell PR for proper conceal
-			_, bg, _ := st.Decompose()
-			st = st.Foreground(bg)
+			st = st.Foreground(st.GetBackground())
 		case "9":
 			st = st.StrikeThrough(true)
 		case "22":
@@ -237,10 +240,6 @@ loop:
 // It currently supports OSC 8 hyperlinks only, implemented as specified by
 // https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda.
 func applyOSC(body string, st tcell.Style) tcell.Style {
-	genAutoID := func(url string) string {
-		sum := sha256.Sum256([]byte(url))
-		return "lf_hyperlink_" + hex.EncodeToString(sum[:8])
-	}
 	extractID := func(params string) string {
 		for seg := range strings.SplitSeq(params, ":") {
 			if seg == "" {
@@ -266,15 +265,91 @@ func applyOSC(body string, st tcell.Style) tcell.Style {
 		if url == "" {
 			return st
 		}
+
+		st = st.Url(url)
 		// Optional property used to identify grouped hyperlinks.
-		// Use hash as a fallback to ensure a "unique" id.
 		if id := extractID(toks[1]); id != "" {
 			st = st.UrlId(id)
-		} else {
-			st = st.UrlId(genAutoID(url))
 		}
-		return st.Url(url)
+		return st
 	default:
 		return st
 	}
+}
+
+// Sanitation helpers for untrusted text (filenames, previews, messages).
+// Pick one of these when handling untrusted input:
+//
+//   sanitizePreview - replace control chars, keep tabs (preview content).
+//   sanitizeName    - replace control chars and tabs (names in width/column slots).
+//   sanitizeMessage - replace control chars, keep lf's own SGR/OSC8 (messages).
+//
+// isControlChar and isPrintable are internal predicates used by the above
+// and the renderer; they are not sanitation entry points.
+
+// isControlChar reports whether a rune is a control character or otherwise
+// unsafe to display in a terminal.
+// Covers C0 (0x00-0x1F), DEL (0x7F), and C1 (0x80-0x9F).
+func isControlChar(r rune) bool {
+	return r < 0x20 || r == 0x7F || r >= 0x80 && r <= 0x9F
+}
+
+// sanitizePreview replaces control characters and invalid bytes with the
+// Unicode replacement character (U+FFFD). Tabs are preserved for content
+// where tab expansion is handled by the renderer (e.g. preview panes).
+func sanitizePreview(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' || !isControlChar(r) {
+			return r
+		}
+		return '\uFFFD'
+	}, s)
+}
+
+// sanitizeName sanitizes a filename, path, or symlink target for display.
+// Unlike sanitizePreview it also replaces tabs, because tabs in names
+// are expanded by the renderer to tabstop width while displaywidth.String
+// counts them as width 1, causing column overflow.
+func sanitizeName(s string) string {
+	return strings.Map(func(r rune) rune {
+		if !isControlChar(r) {
+			return r
+		}
+		return '\uFFFD'
+	}, s)
+}
+
+// sanitizeMessage sanitizes a message intended for the message line. Like
+// sanitizeName it strips control runes, but it preserves terminal sequences
+// that lf itself recognizes (SGR, EL, OSC 8) so internal messages that use
+// color or hyperlinks still render correctly.
+func sanitizeMessage(s string) string {
+	s = strings.TrimRight(s, "\n\r")
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if seq := readTermSequence(s[i:]); seq != "" {
+			b.WriteString(seq)
+			i += len(seq)
+			continue
+		}
+		r, w := utf8.DecodeRuneInString(s[i:])
+		if isControlChar(r) {
+			b.WriteRune('\uFFFD')
+		} else {
+			b.WriteRune(r)
+		}
+		i += w
+	}
+	return b.String()
+}
+
+// isPrintable reports whether a grapheme cluster is safe to display.
+// It rejects C0/C1 controls, DEL, and invalid UTF-8.
+func isPrintable(gc string) bool {
+	r, size := utf8.DecodeRuneInString(gc)
+	if r == utf8.RuneError && size <= 1 {
+		return false
+	}
+	return !isControlChar(r)
 }

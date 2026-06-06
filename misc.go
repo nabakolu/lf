@@ -15,11 +15,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/mattn/go-runewidth"
+	"github.com/clipperhouse/displaywidth"
 )
 
 var (
-	reModKey    = regexp.MustCompile(`<(c|s|a)-(.+)>`)
 	reRulerSub  = regexp.MustCompile(`%[apmcsvfithPd]|%\{[^}]+\}`)
 	reSixelSize = regexp.MustCompile(`"1;1;(\d+);(\d+)`)
 )
@@ -39,49 +38,71 @@ func replaceTilde(s string) string {
 	return s
 }
 
-func runeSliceWidth(rs []rune) int {
-	w := 0
-	for _, r := range rs {
-		w += runewidth.RuneWidth(r)
-	}
-	return w
+// firstGraphemeCluster returns the string containing the first grapheme cluster
+// of the input.
+func firstGraphemeCluster(s string) string {
+	gr := displaywidth.StringGraphemes(s)
+	gr.Next()
+	return gr.Value()
 }
 
-func runeSliceWidthRange(rs []rune, beg, end int) []rune {
-	if beg == end {
-		return []rune{}
+// lastGraphemeCluster returns the string containing the last grapheme cluster
+// of the input.
+func lastGraphemeCluster(s string) string {
+	gr := displaywidth.StringGraphemes(s)
+	var last string
+	for gr.Next() {
+		last = gr.Value()
 	}
-
-	curr := 0
-	b := 0
-	foundb := false
-	for i, r := range rs {
-		w := runewidth.RuneWidth(r)
-		if curr >= beg && !foundb {
-			b = i
-			foundb = true
-		}
-		if curr == end || curr+w > end {
-			return rs[b:i]
-		}
-		curr += w
-	}
-
-	return rs[b:]
+	return last
 }
 
-// runeSliceWidthLastRange returns the last runes of `rs` that take up
-// at most `maxWidth` space.
-func runeSliceWidthLastRange(rs []rune, maxWidth int) []rune {
-	lastWidth := 0
-	for i := len(rs) - 1; i >= 0; i-- {
-		w := runewidth.RuneWidth(rs[i])
-		if lastWidth+w > maxWidth {
-			return rs[i+1:]
+// truncateRight truncates a string from the right based on Unicode widths,
+// taking into account grapheme clusters.
+func truncateRight(s string, maxWidth int) string {
+	buf := make([]byte, 0, len(s))
+	width := 0
+
+	gr := displaywidth.StringGraphemes(s)
+	for gr.Next() {
+		width += gr.Width()
+		if width > maxWidth {
+			break
 		}
-		lastWidth += w
+
+		buf = append(buf, gr.Value()...)
 	}
-	return rs
+
+	return string(buf)
+}
+
+// truncateLeft truncates a string from the left based on Unicode widths,
+// taking into account grapheme clusters.
+func truncateLeft(s string, maxWidth int) string {
+	type cluster struct {
+		bytes []byte
+		width int
+	}
+
+	var clusters []cluster
+	totalWidth := 0
+	gr := displaywidth.StringGraphemes(s)
+	for gr.Next() {
+		clusters = append(clusters, cluster{[]byte(gr.Value()), gr.Width()})
+		totalWidth += gr.Width()
+	}
+
+	buf := make([]byte, 0, len(s))
+	width := 0
+	for _, cluster := range clusters {
+		if totalWidth-width <= maxWidth {
+			buf = append(buf, cluster.bytes...)
+		}
+
+		width += cluster.width
+	}
+
+	return string(buf)
 }
 
 // cmdEscape is used to escape whitespace and special characters with
@@ -246,8 +267,8 @@ func readPairs(r io.Reader) ([][]string, error) {
 // humanize converts a size in bytes to a human-readable form using
 // prefixes for either binary (1 KiB = 1024 B) or decimal (1 KB = 1000 B)
 // multiples. The output should be no more than 5 characters long.
-func humanize(size uint64) string {
-	var base uint64 = 1024
+func humanize(size int64) string {
+	var base int64 = 1024
 	if gOpts.sizeunits == "decimal" {
 		base = 1000
 	}
@@ -262,7 +283,7 @@ func humanize(size uint64) string {
 		"K", // kibi (2^10) or kilo (10^3)
 		"M", // mebi (2^20) or mega (10^6)
 		"G", // gibi (2^30) or giga (10^9)
-		"T", // tebi (2^40) or tera (10^2)
+		"T", // tebi (2^40) or tera (10^12)
 		"P", // pebi (2^50) or peta (10^15)
 		"E", // exbi (2^60) or exa (10^18)
 		"Z", // zebi (2^70) or zetta (10^21)
@@ -271,7 +292,7 @@ func humanize(size uint64) string {
 		"Q", // quebi (2^100) or quetta (10^30)
 	}
 
-	curr := big.NewRat(int64(size), int64(base))
+	curr := big.NewRat(size, base)
 
 	for _, prefix := range prefixes {
 		// if curr < 99.95 then round to 1 decimal place
@@ -280,11 +301,11 @@ func humanize(size uint64) string {
 		}
 
 		// if curr < base-0.5 then round to the nearest integer
-		if curr.Cmp(new(big.Rat).Sub(big.NewRat(int64(base), 1), big.NewRat(1, 2))) < 0 {
+		if curr.Cmp(new(big.Rat).Sub(big.NewRat(base, 1), big.NewRat(1, 2))) < 0 {
 			return fmt.Sprintf("%s%s", curr.FloatString(0), prefix)
 		}
 
-		curr.Quo(curr, big.NewRat(int64(base), 1))
+		curr.Quo(curr, big.NewRat(base, 1))
 	}
 
 	return fmt.Sprintf("+999%s", prefixes[len(prefixes)-1])
@@ -408,29 +429,22 @@ func getFileExtension(file fs.FileInfo) string {
 // character will appear (0 means left, 50 means middle, 100 means right).
 // The file extension is not affected by truncation, however it will be clipped
 // if it exceeds the allowed width.
-func truncateFilename(file fs.FileInfo, maxWidth, truncatePct int, truncateChar rune) string {
-	filename := file.Name()
-	if runeSliceWidth([]rune(filename)) <= maxWidth {
+func truncateFilename(file fs.FileInfo, maxWidth, truncatePct int, truncateChar string) string {
+	filename := sanitizeName(file.Name())
+	if displaywidth.String(filename) <= maxWidth {
 		return filename
 	}
 
-	ext := getFileExtension(file)
-	avail := maxWidth - runewidth.RuneWidth(truncateChar) - runeSliceWidth([]rune(ext))
+	ext := sanitizeName(getFileExtension(file))
+	avail := maxWidth - displaywidth.String(truncateChar) - displaywidth.String(ext)
 	if avail < 0 {
-		result := append([]rune{truncateChar}, []rune(ext)...)
-		return string(runeSliceWidthRange(result, 0, maxWidth))
+		return truncateRight(truncateChar+ext, maxWidth)
 	}
 
-	basename := []rune(strings.TrimSuffix(filename, ext))
-	left := runeSliceWidthRange(basename, 0, avail*truncatePct/100)
-	right := runeSliceWidthLastRange(basename, avail-runeSliceWidth(left))
-
-	var result []rune
-	result = append(result, left...)
-	result = append(result, truncateChar)
-	result = append(result, right...)
-	result = append(result, []rune(ext)...)
-	return string(result)
+	basename := strings.TrimSuffix(filename, ext)
+	left := truncateRight(basename, avail*truncatePct/100)
+	right := truncateLeft(basename, avail-displaywidth.String(left))
+	return left + truncateChar + right + ext
 }
 
 // deletePathRecursive deletes entries from a map if the key is either the given
@@ -449,78 +463,110 @@ func deletePathRecursive[T any](m map[string]T, path string) {
 // readLines reads lines from a file to be displayed as a preview.
 // The number of lines to read is capped since files can be very large.
 // Lines are split on `\n` characters, and `\r` characters are discarded.
+// Individual lines are truncated to avoid unbounded memory usage on files
+// with very long or no newlines.
 // Sixel images are also detected and stored as separate lines.
-// The presence of a null byte outside a sixel image indicates a binary file.
+// C0 control bytes outside of \a \b \t \n \v \f \r \033 and DEL indicate binary content.
 func readLines(reader io.ByteReader, maxLines int) (lines []string, binary bool, sixel bool) {
-	var buf bytes.Buffer
-	var last byte
-	inSixel := false
+	const maxLineBytes = 1 << 16 // 64 KiB per line
 
-	for {
+	type state int
+	const (
+		stateNormal state = iota
+		stateEsc
+		stateSixel
+		stateSixelEsc
+	)
+	currState := stateNormal
+
+	var buf bytes.Buffer
+	maxLinesReached := false
+	flush := func(force bool) {
+		if buf.Len() > 0 || force {
+			lines = append(lines, buf.String())
+		}
+		buf.Reset()
+		if len(lines) >= maxLines {
+			maxLinesReached = true
+		}
+	}
+
+	for !maxLinesReached {
 		b, err := reader.ReadByte()
 		if err != nil {
-			if buf.Len() > 0 {
-				lines = append(lines, buf.String())
-			}
+			flush(false)
 			return
 		}
 
-		if inSixel {
-			buf.WriteByte(b)
-			if b == '\\' && last == '\033' {
-				lines = append(lines, buf.String())
-				buf.Reset()
-				if len(lines) >= maxLines {
-					return
-				}
-				inSixel = false
-			}
-		} else {
-			switch {
-			case b == 0:
+		switch currState {
+		case stateNormal:
+			// C0 control bytes outside of \a \b \t \n \v \f \r \033 and DEL indicate binary content.
+			if b < 0x07 || (b > 0x0D && b < 0x1B) || (b > 0x1B && b < 0x20) || b == 0x7F {
 				return nil, true, false
-			case b == '\033':
-				// withhold as it could be the start of a sixel image
-			case b == 'P' && last == '\033':
-				if buf.Len() > 0 {
-					lines = append(lines, buf.String())
-					buf.Reset()
-					if len(lines) >= maxLines {
-						return
-					}
-				}
-				buf.WriteByte(last)
-				buf.WriteByte(b)
-				inSixel = true
-				sixel = true
-			case last == '\033':
-				// not a sixel image
-				buf.WriteByte(last)
-				buf.WriteByte(b)
-			case b == '\r':
-			case b == '\n':
-				lines = append(lines, buf.String())
-				buf.Reset()
-				if len(lines) >= maxLines {
-					return
-				}
+			}
+			switch b {
+			case '\033':
+				currState = stateEsc
+			case '\r':
+				// filter out carriage return
+			case '\n':
+				flush(true)
 			default:
+				if buf.Len() >= maxLineBytes {
+					flush(true)
+				}
 				buf.WriteByte(b)
+			}
+		case stateEsc:
+			if b == 'P' {
+				flush(false)
+				buf.WriteString("\033P")
+				currState = stateSixel
+			} else {
+				buf.WriteByte('\033')
+				buf.WriteByte(b)
+				currState = stateNormal
+			}
+		case stateSixel:
+			// Inside the DCS frame, accept only printable bytes. Tolerate
+			// '\r'/'\n' (some encoders insert them for readability) by
+			// silently dropping them. Anything else aborts the frame so
+			// that an attacker cannot smuggle CSI/OSC/DCS through it.
+			switch {
+			case b == '\033':
+				buf.WriteByte(b)
+				currState = stateSixelEsc
+			case b == '\r' || b == '\n':
+			case b >= 0x20 && b <= 0x7E:
+				buf.WriteByte(b)
+			default:
+				buf.Reset()
+				currState = stateNormal
+			}
+		case stateSixelEsc:
+			if b == '\\' {
+				buf.WriteByte(b)
+				flush(true)
+				sixel = true
+				currState = stateNormal
+			} else {
+				buf.Reset()
+				currState = stateNormal
 			}
 		}
-
-		last = b
 	}
+
+	return
 }
 
 // getWidths calculates the widths of windows as the result of applying the
 // `ratios` option to the screen width. One column is allocated for each divider
-// between windows. The `drawbox` option requires an additional two columns to
-// draw the left and right borders.
-func getWidths(wtot int, ratios []int, drawbox bool) []int {
+// between windows. When `drawbox` is enabled and `borderstyle` includes an outline,
+// getWidths reserves two additional columns for the left and right borders.
+func getWidths(wtot int, ratios []int, drawbox bool, borderstyle borderStyle) []int {
 	rlen := len(ratios)
 	wtot -= rlen - 1
-	if drawbox {
+	if drawbox && borderstyle&borderOutline != 0 {
 		wtot -= 2
 	}
 	wtot = max(wtot, 0)

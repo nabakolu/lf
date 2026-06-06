@@ -10,6 +10,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+### Changed
+
+- The key `<backspace2>` has been renamed to `<backspace>` for `map` keybindings (#2286).
+- `.Stat.DirSize` and `.Stat.DirCount` in the ruler file no longer have a pointer type, and will be set to `-1` instead of `nil` if the corresponding value cannot be determined (#2397).
+- `setlocal` commands no longer support the ability to specify recursive directories (#2415). For use cases where `setlocal` should apply to a directory based on some condition, it is recommended to script this inside the `on-load` hook command.
+- On Windows, files are now considered executable according to `PATHEXT` when matching colors and icons (#2448).
+- The `rulerfmt` and `statfmt` options are now marked as deprecated in favor of using the ruler file (configured using the `rulerfile` option), and will be removed in a future release (#2477).
+- The client server connection will now exclusively use Unix domain sockets on Windows and no longer fall back to TCP sockets (#2527).
+- The fallback location of the server socket (used if `XDG_RUNTIME_DIR` is not defined) is changed from `/tmp/lf.<user>.sock` to `/tmp/lf-<uid>/lf.sock`, and the containing directory must be owned by the current user (#2532).
+- The `ignorecase` and `ignoredia` options (intended for searching) no longer affect sorting, and instead `sortignorecase` and `sortignoredia` have been added to customize sorting (#2543).
+- Previews are now marked as binary if they contain a control character other than bell, backspace, tab, newline, vertical tab, form feed, carriage return, escape or delete (#2561). Previously only null bytes were used to detect binary previews.
+
+### Added
+
+- Emoji sequences containing Zero Width Joiner characters are now displayed as a single combined glyph (#2286).
+- Key combinations such as `<c-h>` and `<backspace>` can now be distinguished when supported by the terminal (#2286) (#2496).
+- A new field `.All` is added to the `ruler` file to display the number of all files (i.e. visible + hidden) in the current working directory (#2376).
+- A new option `numbercursorfmt` is added to further customize the appearance of line numbers (#2395).
+- A new option `terminalcursor` is added to customize the appearance of the terminal cursor (#2441).
+- A new option `borderstyle` is added to control whether `drawbox` draws an outline, separators, or both (#2445). This also replaces the existing `roundbox` option.
+- The `loading...` message delay of 100 milliseconds for file previews is now applied to directories as well (#2410).
+- `lf` will now automatically change to the parent directory if the current directory no longer exists and the `watch` option is enabled (#2424).
+
+### Fixed
+
+- Previews are now cleaned when changing to an empty directory (#2369).
+- Previews are now correctly updated on `visual-change` (#2373).
+- The `dircounts` indicator for errors is changed back to `!` instead of `?` (#2372).
+- The `select` command can now select files immediately after creation as part of a script (#2377).
+- The `on-load` hook command now ignores `.git` directories to reduce flicker and repeated `on-load` triggers (#2382).
+- Preview messages like `empty` or `loading...` have their alignment improved (#2400).
+- A bug where the `loading...` message was not displayed for volatile previews after the first time is now fixed (#2410).
+- The `cmd-transpose` command now advances the cursor correctly after swapping characters (#2413).
+- Symbolic links are no longer followed when changing directories (#2423).
+- Using the `select` command with a blank string as the argument now properly raises an error instead of changing to the parent directory (#2429).
+- The number of bytes read is now limited for previews that contain extremely long lines (#2458).
+- Control characters are now stripped from previews to prevent dangerous terminal sequences from being processed if the default previewer is used (#2459).
+- Various fixes have been made to sanitize input data and prevent terminal sequence injection (#2467) (#2546) (#2590).
+- Sixel images with the same height as the preview window are now displayed correctly when using `tmux` (#2474).
+- A bug where previews were loaded according to the old dimensions of the preview window following a terminal resize is now fixed (#2491).
+- Completion matches are now properly aligned if they contain terminal sequences (#2511).
+- `load` commands are now processed when the `watch` option is enabled, which should fix various issues with refreshing updated files/directories (#2513).
+- Parsing octal values in strings are now restricted to numbers between `0` and `255` (#2516).
+- Color values are now validated (must be between `0` and `255`) when parsing terminal sequences (#2517).
+- Directories are now refreshed properly after using the `cd` command (#2518).
+- Successfully copied files are no longer deleted if their timestamps could not be preserved (#2519).
+- Previews no longer flicker when the terminal height decreases (#2537).
+- The output for `-print-last-dir`/`-print-selection` is sanitized if `stdout` is connected to a terminal (#2540).
+- Sixel previews are now properly sanitized to prevent injection of arbitrary terminal sequences (#2542).
+- Symbolic linked directories are now updated properly when the `watch` option is enabled (#2550).
+- Previews of modified files are now updated properly when the `preload` option is enabled (#2567).
+- Previews of files other than the current file are now reloaded immediately after being modified when the `watch` option is enabled (#2594).
+- The `loading...` message now shows for files that are reloading due to being modified (#2597).
+
 ## [r41](https://github.com/gokcehan/lf/releases/tag/r41)
 
 ### Changed
@@ -556,7 +610,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- A longstanding issue regarding UI suspend/resume for shell commands in MacOS is now fixed in Tcell.
+- A longstanding issue regarding UI suspend/resume for shell commands in macOS is now fixed in Tcell.
 - Renaming a symlink to its target or a symlink to another with the same target should now be handled properly (#581).
 - Autocompletion in a directory containing a broken symlink should now work as intended (#581).
 - Setting `shellopts` to empty in the configuration file should not pass an extra empty argument to shell commands anymore.

@@ -3,13 +3,12 @@ package main
 import (
 	"cmp"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
-	"syscall"
 
 	"golang.org/x/sys/windows"
 )
@@ -21,12 +20,11 @@ var (
 	envShell  = os.Getenv("SHELL")
 )
 
-var envPathExt = os.Getenv("PATHEXT")
+var envPathExts []string
 
 var (
 	gDefaultShell       = "cmd"
 	gDefaultShellFlag   = "/c"
-	gDefaultSocketProt  = "unix"
 	gDefaultSocketPath  string
 	gDefaultHiddenFiles []string
 )
@@ -106,14 +104,15 @@ func init() {
 	gTagsPath = filepath.Join(data, "lf", "tags")
 	gHistoryPath = filepath.Join(data, "lf", "history")
 
-	socket, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
-	if err != nil {
-		gDefaultSocketProt = "tcp"
-		gDefaultSocketPath = "127.0.0.1:12345"
-	} else {
-		runtime := os.TempDir()
-		gDefaultSocketPath = filepath.Join(runtime, fmt.Sprintf("lf.%s.sock", gUser.Username))
-		syscall.Close(socket)
+	runtimeDir := os.TempDir()
+	gDefaultSocketPath = filepath.Join(runtimeDir, "lf.sock")
+
+	s := cmp.Or(os.Getenv("PATHEXT"), ".COM;.EXE;.BAT;.CMD")
+	for ext := range strings.SplitSeq(s, ";") {
+		if ext == "" {
+			continue
+		}
+		envPathExts = append(envPathExts, strings.ToLower(ext))
 	}
 }
 
@@ -174,13 +173,11 @@ func setDefaults() {
 func setUserUmask() {}
 
 func isExecutable(f os.FileInfo) bool {
-	for e := range strings.SplitSeq(envPathExt, string(filepath.ListSeparator)) {
-		if strings.HasSuffix(strings.ToLower(f.Name()), strings.ToLower(e)) {
-			log.Print(f.Name(), e)
-			return true
-		}
+	ext := filepath.Ext(f.Name())
+	if ext == "" {
+		return false
 	}
-	return false
+	return slices.Contains(envPathExts, strings.ToLower(ext))
 }
 
 func isHidden(f os.FileInfo, path string, hiddenfiles []string) bool {

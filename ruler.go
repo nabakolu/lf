@@ -17,9 +17,9 @@ type statData struct {
 	Path        string
 	Name        string
 	Extension   string
-	Size        uint64
-	DirSize     *uint64
-	DirCount    *uint64
+	Size        int64
+	DirSize     int64
+	DirCount    int
 	Permissions string
 	ModTime     string
 	AccessTime  string
@@ -44,6 +44,7 @@ type rulerData struct {
 	Index            int
 	Total            int
 	Hidden           int
+	All              int
 	LinePercentage   string
 	ScrollPercentage string
 	Filter           []string
@@ -77,7 +78,7 @@ func renderRuler(ruler *template.Template, data rulerData, width int) (string, s
 		return "", "", err
 	}
 
-	s := strings.ReplaceAll(b.String(), "\n", "")
+	s := strings.NewReplacer("\r", "", "\n", "").Replace(b.String())
 	sections := strings.Split(s, "\x1f")
 
 	if len(sections) == 1 {
