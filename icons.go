@@ -165,9 +165,8 @@ func (im iconMap) get(f *file) iconDef {
 		key = "su"
 	case f.Mode()&os.ModeSetgid != 0:
 		key = "sg"
-	// disable executable icon
-	// case isExecutable(f.FileInfo):
-		// key = "ex"
+	case isExecutable(f.FileInfo):
+		key = "fi" // make executable files use normal file icons
 	}
 
 	if val, ok := im.icons[key]; ok {
@@ -183,6 +182,10 @@ func (im iconMap) get(f *file) iconDef {
 	}
 
 	if val, ok := im.icons[filepath.Base(f.Name())+".*"]; ok {
+		return val
+	}
+
+	if val, ok := im.icons["*"+strings.ToLower(f.ext)]; ok {
 		return val
 	}
 
