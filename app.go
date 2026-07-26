@@ -160,11 +160,18 @@ func loadFiles() (clipboard clipboard, err error) {
 }
 
 func saveFiles(clipboard clipboard) error {
-	if err := os.MkdirAll(filepath.Dir(gFilesPath), os.ModePerm); err != nil {
+	for _, path := range clipboard.paths {
+		// the clipboard file stores one path per line so a newline cannot be saved
+		if strings.ContainsAny(path, "\n\r") {
+			return fmt.Errorf("cannot copy %s because the name contains a newline", path)
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(gFilesPath), 0o700); err != nil {
 		return fmt.Errorf("creating data directory: %w", err)
 	}
 
-	files, err := os.Create(gFilesPath)
+	files, err := os.OpenFile(gFilesPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("opening file selections file: %w", err)
 	}
@@ -183,10 +190,6 @@ func saveFiles(clipboard clipboard) error {
 	}
 
 	for _, path := range clipboard.paths {
-		if strings.ContainsAny(path, "\n\r") {
-			log.Printf("clipboard: skipping path with newline: %q", path)
-			continue
-		}
 		if _, err := fmt.Fprintln(files, path); err != nil {
 			return fmt.Errorf("write path to file: %w", err)
 		}
@@ -240,11 +243,11 @@ func (app *app) writeHistory() error {
 		app.cmdHistory = app.cmdHistory[len(app.cmdHistory)-1000:]
 	}
 
-	if err := os.MkdirAll(filepath.Dir(gHistoryPath), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Dir(gHistoryPath), 0o700); err != nil {
 		return fmt.Errorf("creating data directory: %w", err)
 	}
 
-	f, err := os.Create(gHistoryPath)
+	f, err := os.OpenFile(gHistoryPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("creating history file: %w", err)
 	}
@@ -614,7 +617,8 @@ func (app *app) runShell(s string, args []string, prefix string) {
 		// read before calling [exec.Cmd.Wait], however in this case Cmd.Wait should
 		// only wait for the command to finish executing regardless of whether the
 		// output has been fully read or not.
-		inReader, inWriter, err := os.Pipe()
+		var err error
+		inReader, inWriter, err = os.Pipe()
 		if err != nil {
 			log.Printf("creating input pipe: %s", err)
 			return

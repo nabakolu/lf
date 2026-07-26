@@ -701,8 +701,7 @@ func (nav *nav) resize(ui *ui) {
 func (nav *nav) position() {
 	var base string
 
-	for i := len(nav.dirPaths) - 1; i >= 0; i-- {
-		path := nav.dirPaths[i]
+	for i, path := range slices.Backward(nav.dirPaths) {
 		if i < len(nav.dirPaths)-1 {
 			nav.getDir(path).sel(base, nav.height)
 		}
@@ -1424,7 +1423,7 @@ func (nav *nav) moveAsync(app *app, srcs []string, dstDir string) {
 		file := filepath.Base(src)
 		dst := filepath.Join(dstDir, file)
 
-		if dstStat, err := os.Stat(dst); err == nil {
+		if dstStat, err := os.Lstat(dst); err == nil {
 			if os.SameFile(srcStat, dstStat) {
 				sendErr("rename %s %s: source and destination are the same file", src, dst)
 				continue
@@ -1867,11 +1866,11 @@ func (nav *nav) readMarks() error {
 }
 
 func (nav *nav) writeMarks() error {
-	if err := os.MkdirAll(filepath.Dir(gMarksPath), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Dir(gMarksPath), 0o700); err != nil {
 		return fmt.Errorf("creating data directory: %w", err)
 	}
 
-	f, err := os.Create(gMarksPath)
+	f, err := os.OpenFile(gMarksPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("creating marks file: %w", err)
 	}
@@ -1929,11 +1928,11 @@ func (nav *nav) readTags() error {
 }
 
 func (nav *nav) writeTags() error {
-	if err := os.MkdirAll(filepath.Dir(gTagsPath), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Dir(gTagsPath), 0o700); err != nil {
 		return fmt.Errorf("creating data directory: %w", err)
 	}
 
-	f, err := os.Create(gTagsPath)
+	f, err := os.OpenFile(gTagsPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("creating tags file: %w", err)
 	}
